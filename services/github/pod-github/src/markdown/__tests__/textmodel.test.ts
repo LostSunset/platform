@@ -695,7 +695,7 @@ A list of closed updated issues`
               type: MarkupNodeType.text,
               text: 'hello'
             }
-          ],
+          ]
         },
         {
           type: MarkupNodeType.paragraph,
@@ -704,7 +704,7 @@ A list of closed updated issues`
               text: '\n',
               type: MarkupNodeType.text,
             }
-          ],
+          ]
         },
         {
           type: MarkupNodeType.heading,
