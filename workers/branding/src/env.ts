@@ -1,5 +1,5 @@
 //
-// Copyright © 2023 Hardcore Engineering Inc.
+// Copyright © 2024 Hardcore Engineering Inc.
 //
 // Licensed under the Eclipse Public License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License. You may
@@ -13,10 +13,6 @@
 // limitations under the License.
 //
 
-export * from './image'
-export * from './reference'
-export * from './todo'
-export * from './file'
-export * from './codeblock'
-export * from './comment'
-export { getDataAttribute } from './utils'
+export interface Env {
+  KV: KVNamespace
+}
