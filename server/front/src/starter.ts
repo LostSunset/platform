@@ -101,6 +101,11 @@ export function startFront (ctx: MeasureContext, extraConfig?: Record<string, st
     process.exit(1)
   }
 
+  let uploadConfig = process.env.UPLOAD_CONFIG
+  if (uploadConfig === undefined) {
+    uploadConfig = ''
+  }
+
   let previewConfig = process.env.PREVIEW_CONFIG
   if (previewConfig === undefined) {
     // Use universal preview config
@@ -118,6 +123,8 @@ export function startFront (ctx: MeasureContext, extraConfig?: Record<string, st
 
   setMetadata(serverToken.metadata.Secret, serverSecret)
 
+  const disableSignUp = process.env.DISABLE_SIGNUP
+
   const config = {
     elasticUrl,
     storageAdapter,
@@ -134,7 +141,9 @@ export function startFront (ctx: MeasureContext, extraConfig?: Record<string, st
     collaborator,
     brandingUrl,
     previewConfig,
-    pushPublicKey
+    uploadConfig,
+    pushPublicKey,
+    disableSignUp
   }
   console.log('Starting Front service with', config)
   const shutdown = start(ctx, config, SERVER_PORT, extraConfig)

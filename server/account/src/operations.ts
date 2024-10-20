@@ -1278,8 +1278,10 @@ export async function getPendingWorkspace (
   }
   // Move to config?
   const processingTimeoutMs = 30 * 1000
+  const wsLivenessDays = getMetadata(accountPlugin.metadata.WsLivenessDays)
+  const wsLivenessMs = wsLivenessDays !== undefined ? wsLivenessDays * 24 * 60 * 60 * 1000 : undefined
 
-  const result = await db.workspace.getPendingWorkspace(region, version, operation, processingTimeoutMs)
+  const result = await db.workspace.getPendingWorkspace(region, version, operation, processingTimeoutMs, wsLivenessMs)
 
   if (result != null) {
     ctx.info('getPendingWorkspace', {
@@ -1288,7 +1290,8 @@ export async function getPendingWorkspace (
       workspaceName: result.workspaceName,
       operation,
       region,
-      version
+      workspaceVersion: result.version,
+      requestedVersion: version
     })
   }
 
@@ -2334,8 +2337,9 @@ export async function loginWithProvider (
   _email: string,
   first: string,
   last: string,
-  extra?: Record<string, string>
-): Promise<LoginInfo> {
+  extra?: Record<string, string>,
+  signUpDisabled: boolean = false
+): Promise<LoginInfo | null> {
   try {
     const email = cleanEmail(_email)
     if (last == null) {
@@ -2357,6 +2361,11 @@ export async function loginWithProvider (
       }
       return result
     }
+
+    if (signUpDisabled) {
+      return null
+    }
+
     const newAccount = await createAcc(ctx, db, branding, email, null, first, last, true, true, extra)
 
     const result = {
@@ -2463,7 +2472,7 @@ export async function deleteWorkspace (
 /**
  * @public
  */
-export function getMethods (): Record<string, AccountMethod> {
+export function getMethods (hasSignUp: boolean = true): Record<string, AccountMethod> {
   return {
     login: wrap(login),
     join: wrap(join),
@@ -2478,7 +2487,7 @@ export function getMethods (): Record<string, AccountMethod> {
     getInviteLink: wrap(getInviteLink),
     getAccountInfo: wrap(getAccountInfo),
     getWorkspaceInfo: wrap(getWorkspaceInfo),
-    createAccount: wrap(createAccount),
+    ...(hasSignUp ? { createAccount: wrap(createAccount) } : {}),
     createWorkspace: wrap(createUserWorkspace),
     assignWorkspace: wrap(assignWorkspace),
     removeWorkspace: wrap(removeWorkspace),
