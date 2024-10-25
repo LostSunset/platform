@@ -18,8 +18,8 @@ dependencies:
     specifier: ^3.582.0
     version: 3.582.0
   '@cloudflare/workers-types':
-    specifier: ^4.20240729.0
-    version: 4.20241004.0
+    specifier: ^4.20241022.0
+    version: 4.20241022.0
   '@elastic/elasticsearch':
     specifier: ^7.14.0
     version: 7.17.13
@@ -158,6 +158,9 @@ dependencies:
   '@rush-temp/cloud-datalake':
     specifier: file:./projects/cloud-datalake.tgz
     version: file:projects/cloud-datalake.tgz(@types/node@20.11.19)(bufferutil@4.0.8)(esbuild@0.20.1)(ts-node@10.9.2)(utf-8-validate@6.0.4)
+  '@rush-temp/cloud-transactor':
+    specifier: file:./projects/cloud-transactor.tgz
+    version: file:projects/cloud-transactor.tgz(@types/node@20.11.19)(bufferutil@4.0.8)(ts-node@10.9.2)(utf-8-validate@6.0.4)
   '@rush-temp/collaboration':
     specifier: file:./projects/collaboration.tgz
     version: file:projects/collaboration.tgz(esbuild@0.20.1)(ts-node@10.9.2)
@@ -1740,8 +1743,8 @@ dependencies:
     specifier: 2.12.313
     version: 2.12.313
   pg:
-    specifier: 8.12.0
-    version: 8.12.0
+    specifier: 8.13.0
+    version: 8.13.0
   png-chunks-extract:
     specifier: ^1.0.0
     version: 1.0.0
@@ -1902,8 +1905,8 @@ dependencies:
     specifier: ^5.0.0
     version: 5.0.0(winston@3.13.1)
   wrangler:
-    specifier: ^3.80.1
-    version: 3.80.2(@cloudflare/workers-types@4.20241004.0)(bufferutil@4.0.8)(utf-8-validate@6.0.4)
+    specifier: ^3.83.0
+    version: 3.83.0(@cloudflare/workers-types@4.20241022.0)(bufferutil@4.0.8)(utf-8-validate@6.0.4)
   ws:
     specifier: ^8.18.0
     version: 8.18.0(bufferutil@4.0.8)(utf-8-validate@6.0.4)
@@ -3935,8 +3938,8 @@ packages:
       mime: 3.0.0
     dev: false
 
-  /@cloudflare/workerd-darwin-64@1.20240925.0:
-    resolution: {integrity: sha512-KdLnSXuzB65CbqZPm+qYzk+zkQ1tUNPaaRGYVd/jPYAxwwtfTUQdQ+ahDPwVVs2tmQELKy7ZjQjf2apqSWUfjw==}
+  /@cloudflare/workerd-darwin-64@1.20241022.0:
+    resolution: {integrity: sha512-1NNYun37myMTgCUiPQEJ0cMal4mKZVTpkD0b2tx9hV70xji+frVJcSK8YVLeUm1P+Rw1d/ct8DMgQuCpsz3Fsw==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [darwin]
@@ -3944,8 +3947,8 @@ packages:
     dev: false
     optional: true
 
-  /@cloudflare/workerd-darwin-arm64@1.20240925.0:
-    resolution: {integrity: sha512-MiQ6uUmCXjsXgWNV+Ock2tp2/tYqNJGzjuaH6jFioeRF+//mz7Tv7J7EczOL4zq+TH8QFOh0/PUsLyazIWVGng==}
+  /@cloudflare/workerd-darwin-arm64@1.20241022.0:
+    resolution: {integrity: sha512-FOO/0P0U82EsTLTdweNVgw+4VOk5nghExLPLSppdOziq6IR5HVgP44Kmq5LdsUeHUhwUmfOh9hzaTpkNzUqKvw==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [darwin]
@@ -3953,8 +3956,8 @@ packages:
     dev: false
     optional: true
 
-  /@cloudflare/workerd-linux-64@1.20240925.0:
-    resolution: {integrity: sha512-Rjix8jsJMfsInmq3Hm3fmiRQ+rwzuWRPV1pg/OWhMSfNP7Qp2RCU+RGkhgeR9Z5eNAje0Sn2BMrFq4RvF9/yRA==}
+  /@cloudflare/workerd-linux-64@1.20241022.0:
+    resolution: {integrity: sha512-RsNc19BQJG9yd+ngnjuDeG9ywZG+7t1L4JeglgceyY5ViMNMKVO7Zpbsu69kXslU9h6xyQG+lrmclg3cBpnhYA==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [linux]
@@ -3962,8 +3965,8 @@ packages:
     dev: false
     optional: true
 
-  /@cloudflare/workerd-linux-arm64@1.20240925.0:
-    resolution: {integrity: sha512-VYIPeMHQRtbwQoIjUwS/zULlywPxyDvo46XkTpIW5MScEChfqHvAYviQ7TzYGx6Q+gmZmN+DUB2KOMx+MEpCxA==}
+  /@cloudflare/workerd-linux-arm64@1.20241022.0:
+    resolution: {integrity: sha512-x5mUXpKxfsosxcFmcq5DaqLs37PejHYVRsNz1cWI59ma7aC4y4Qn6Tf3i0r9MwQTF/MccP4SjVslMU6m4W7IaA==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [linux]
@@ -3971,8 +3974,8 @@ packages:
     dev: false
     optional: true
 
-  /@cloudflare/workerd-windows-64@1.20240925.0:
-    resolution: {integrity: sha512-C8peGvaU5R51bIySi1VbyfRgwNSSRknqoFSnSbSBI3uTN3THTB3UnmRKy7GXJDmyjgXuT9Pcs1IgaWNubLtNtw==}
+  /@cloudflare/workerd-windows-64@1.20241022.0:
+    resolution: {integrity: sha512-eBCClx4szCOgKqOlxxbdNszMqQf3MRG1B9BRIqEM/diDfdR9IrZ8l3FaEm+l9gXgPmS6m1NBn40aWuGBl8UTSw==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
@@ -3980,16 +3983,16 @@ packages:
     dev: false
     optional: true
 
-  /@cloudflare/workers-shared@0.5.4:
-    resolution: {integrity: sha512-PNL/0TjKRdUHa1kwgVdqUNJVZ9ez4kacsi8omz+gv859EvJmsVuGiMAClY2YfJnC9LVKhKCcjqmFgKNXG9/IXA==}
+  /@cloudflare/workers-shared@0.7.0:
+    resolution: {integrity: sha512-LLQRTqx7lKC7o2eCYMpyc5FXV8d0pUX6r3A+agzhqS9aoR5A6zCPefwQGcvbKx83ozX22ATZcemwxQXn12UofQ==}
     engines: {node: '>=16.7.0'}
     dependencies:
       mime: 3.0.0
       zod: 3.23.8
     dev: false
 
-  /@cloudflare/workers-types@4.20241004.0:
-    resolution: {integrity: sha512-3LrPvtecs4umknOF1bTPNLHUG/ZjeSE6PYBQ/tbO7lwaVhjZTaTugiaCny2byrZupBlVNuubQVktcAgMfw0C1A==}
+  /@cloudflare/workers-types@4.20241022.0:
+    resolution: {integrity: sha512-1zOAw5QIDKItzGatzCrEpfLOB1AuMTwVqKmbw9B9eBfCUGRFNfJYMrJxIwcse9EmKahsQt2GruqU00pY/GyXgg==}
     dev: false
 
   /@colors/colors@1.5.0:
@@ -12952,6 +12955,10 @@ packages:
       '@babel/runtime': 7.23.9
     dev: false
 
+  /date-fns@4.1.0:
+    resolution: {integrity: sha512-Ukq0owbQXxa/U3EGtsdVBkR1w7KOQ5gIBqdH2hkvknzZPYvBxb/aa6E8L7tmjFtkwZBu3UXBbjIgPo/Ez4xaNg==}
+    dev: false
+
   /debounce-fn@4.0.0:
     resolution: {integrity: sha512-8pYCQiL9Xdcg0UPSD3d+0KMlOjp+KGU5EPwYddgzQ7DATsg4fuUDjQtsYLmWjnk2obnNHgV3vE2Y4jejSOJVBQ==}
     engines: {node: '>=10'}
@@ -17247,6 +17254,10 @@ packages:
     resolution: {integrity: sha512-mK3ReOt4ARAGy0V0J7uHmArG2USN2x0zprZ+u+YgmeRjXTDbaowDy3kPcsmQY6tH+uHhDgpWit9Vqmv/4rTXwA==}
     dev: false
 
+  /itty-time@1.0.6:
+    resolution: {integrity: sha512-+P8IZaLLBtFv8hCkIjcymZOp4UJ+xW6bSlQsXGqrkmJh7vSiMFSlNne0mCYagEE0N7HDNR5jJBRxwN0oYv61Rw==}
+    dev: false
+
   /jackspeak@2.3.6:
     resolution: {integrity: sha512-N3yCS/NegsOBokc8GAdM8UcmfsKiSS8cipheD/nivzr700H+nsMOxJjQnvwOcRYVuFkdH0wGUvW2WbXGmrZGbQ==}
     engines: {node: '>=14'}
@@ -18998,8 +19009,8 @@ packages:
       webpack: 5.90.3(esbuild@0.20.1)(webpack-cli@5.1.4)
     dev: false
 
-  /miniflare@3.20240925.1(bufferutil@4.0.8)(utf-8-validate@6.0.4):
-    resolution: {integrity: sha512-odavnAwWLevMWOi/efIdAI9AVlg8C8NfXe2YLoAeG+Fj5BDHPDxCoY7AjZvBj3CJ7bszkoYyhoPEH60X+Vk+7g==}
+  /miniflare@3.20241022.0(bufferutil@4.0.8)(utf-8-validate@6.0.4):
+    resolution: {integrity: sha512-x9Fbq1Hmz1f0osIT9Qmj78iX4UpCP2EqlZnA/tzj/3+I49vc3Kq0fNqSSKplcdf6HlCHdL3fOBicmreQF4BUUQ==}
     engines: {node: '>=16.13'}
     hasBin: true
     dependencies:
@@ -19011,7 +19022,7 @@ packages:
       glob-to-regexp: 0.4.1
       stoppable: 1.1.0
       undici: 5.28.4
-      workerd: 1.20240925.0
+      workerd: 1.20241022.0
       ws: 8.18.0(bufferutil@4.0.8)(utf-8-validate@6.0.4)
       youch: 3.3.4
       zod: 3.23.8
@@ -20396,8 +20407,8 @@ packages:
     dev: false
     optional: true
 
-  /pg-connection-string@2.6.4:
-    resolution: {integrity: sha512-v+Z7W/0EO707aNMaAEfiGnGL9sxxumwLl2fJvCQtMn9Fxsg+lPpPkdcyBSv/KFgpGdYkMfn+EI1Or2EHjpgLCA==}
+  /pg-connection-string@2.7.0:
+    resolution: {integrity: sha512-PI2W9mv53rXJQEOb8xNR8lH7Hr+EKa6oJa38zsK0S/ky2er16ios1wLKhZyxzD7jUReiWokc9WK5nxSnC7W1TA==}
     dev: false
 
   /pg-int8@1.0.1:
@@ -20410,16 +20421,20 @@ packages:
     engines: {node: '>=4'}
     dev: false
 
-  /pg-pool@3.6.2(pg@8.12.0):
-    resolution: {integrity: sha512-Htjbg8BlwXqSBQ9V8Vjtc+vzf/6fVUuak/3/XXKA9oxZprwW3IMDQTGHP+KDmVL7rtd+R1QjbnCFPuTHm3G4hg==}
+  /pg-pool@3.7.0(pg@8.13.0):
+    resolution: {integrity: sha512-ZOBQForurqh4zZWjrgSwwAtzJ7QiRX0ovFkZr2klsen3Nm0aoh33Ls0fzfv3imeH/nw/O27cjdz5kzYJfeGp/g==}
     peerDependencies:
       pg: '>=8.0'
     dependencies:
-      pg: 8.12.0
+      pg: 8.13.0
     dev: false
 
   /pg-protocol@1.6.1:
     resolution: {integrity: sha512-jPIlvgoD63hrEuihvIg+tJhoGjUsLPn6poJY9N5CnlPd91c2T18T/9zBtLxZSb1EhYxBRoZJtzScCaWlYLtktg==}
+    dev: false
+
+  /pg-protocol@1.7.0:
+    resolution: {integrity: sha512-hTK/mE36i8fDDhgDFjy6xNOG+LCorxLG3WO17tku+ij6sVHXh1jQUJ8hYAnRhNla4QVD2H8er/FOjc/+EgC6yQ==}
     dev: false
 
   /pg-types@2.2.0:
@@ -20446,8 +20461,8 @@ packages:
       postgres-range: 1.1.4
     dev: false
 
-  /pg@8.12.0:
-    resolution: {integrity: sha512-A+LHUSnwnxrnL/tZ+OLfqR1SxLN3c/pgDztZ47Rpbsd4jUytsTtwQo/TLPRzPJMp/1pbhYVhH9cuSZLAajNfjQ==}
+  /pg@8.13.0:
+    resolution: {integrity: sha512-34wkUTh3SxTClfoHB3pQ7bIMvw9dpFU1audQQeZG837fmHfHpr14n/AELVDoOYVDW2h5RDWU78tFjkD+erSBsw==}
     engines: {node: '>= 8.0.0'}
     peerDependencies:
       pg-native: '>=3.0.1'
@@ -20455,9 +20470,9 @@ packages:
       pg-native:
         optional: true
     dependencies:
-      pg-connection-string: 2.6.4
-      pg-pool: 3.6.2(pg@8.12.0)
-      pg-protocol: 1.6.1
+      pg-connection-string: 2.7.0
+      pg-pool: 3.7.0(pg@8.13.0)
+      pg-protocol: 1.7.0
       pg-types: 2.2.0
       pgpass: 1.0.5
     optionalDependencies:
@@ -24150,8 +24165,8 @@ packages:
       '@fastify/busboy': 2.1.1
     dev: false
 
-  /unenv-nightly@2.0.0-20240919-125358-9a64854:
-    resolution: {integrity: sha512-XjsgUTrTHR7iw+k/SRTNjh6EQgwpC9voygnoCJo5kh4hKqsSDHUW84MhL9EsHTNfLctvVBHaSw8e2k3R2fKXsQ==}
+  /unenv-nightly@2.0.0-20241018-011344-e666fcf:
+    resolution: {integrity: sha512-D00bYn8rzkCBOlLx+k1iHQlc69jvtJRT7Eek4yIGQ6461a2tUBjngGZdRpqsoXAJCz/qBW0NgPting7Zvg+ysg==}
     dependencies:
       defu: 6.1.4
       ohash: 1.1.4
@@ -25045,46 +25060,48 @@ packages:
     resolution: {integrity: sha512-gvVzJFlPycKc5dZN4yPkP8w7Dc37BtP1yczEneOb4uq34pXZcvrtRTmWV8W+Ume+XCxKgbjM+nevkyFPMybd4Q==}
     dev: false
 
-  /workerd@1.20240925.0:
-    resolution: {integrity: sha512-/Jj6+yLwfieZGEt3Kx4+5MoufuC3g/8iFaIh4MPBNGJOGYmdSKXvgCqz09m2+tVCYnysRfbq2zcbVxJRBfOCqQ==}
+  /workerd@1.20241022.0:
+    resolution: {integrity: sha512-jyGXsgO9DRcJyx6Ovv7gUyDPc3UYC2i/E0p9GFUg6GUzpldw4Y93y9kOmdfsOnKZ3+lY53veSiUniiBPE6Q2NQ==}
     engines: {node: '>=16'}
     hasBin: true
     requiresBuild: true
     optionalDependencies:
-      '@cloudflare/workerd-darwin-64': 1.20240925.0
-      '@cloudflare/workerd-darwin-arm64': 1.20240925.0
-      '@cloudflare/workerd-linux-64': 1.20240925.0
-      '@cloudflare/workerd-linux-arm64': 1.20240925.0
-      '@cloudflare/workerd-windows-64': 1.20240925.0
+      '@cloudflare/workerd-darwin-64': 1.20241022.0
+      '@cloudflare/workerd-darwin-arm64': 1.20241022.0
+      '@cloudflare/workerd-linux-64': 1.20241022.0
+      '@cloudflare/workerd-linux-arm64': 1.20241022.0
+      '@cloudflare/workerd-windows-64': 1.20241022.0
     dev: false
 
-  /wrangler@3.80.2(@cloudflare/workers-types@4.20241004.0)(bufferutil@4.0.8)(utf-8-validate@6.0.4):
-    resolution: {integrity: sha512-WSMDXoNcg+DjZ4i0RMJpz2TKrCbTtsxNsQAwyYg7LRZlfmTZQZOPbHWhATVa4fCsNL6eElN050fMHOW9MptM9g==}
+  /wrangler@3.83.0(@cloudflare/workers-types@4.20241022.0)(bufferutil@4.0.8)(utf-8-validate@6.0.4):
+    resolution: {integrity: sha512-qDzdUuTngKqmm2OJUZm7Gk4+Hv37F2nNNAHuhIgItEIhxBdOVDsgKmvpd+f41MFxyuGg3fbGWYANHI+0V2Z5yw==}
     engines: {node: '>=16.17.0'}
     hasBin: true
     peerDependencies:
-      '@cloudflare/workers-types': ^4.20240925.0
+      '@cloudflare/workers-types': ^4.20241022.0
     peerDependenciesMeta:
       '@cloudflare/workers-types':
         optional: true
     dependencies:
       '@cloudflare/kv-asset-handler': 0.3.4
-      '@cloudflare/workers-shared': 0.5.4
-      '@cloudflare/workers-types': 4.20241004.0
+      '@cloudflare/workers-shared': 0.7.0
+      '@cloudflare/workers-types': 4.20241022.0
       '@esbuild-plugins/node-globals-polyfill': 0.2.3(esbuild@0.17.19)
       '@esbuild-plugins/node-modules-polyfill': 0.2.2(esbuild@0.17.19)
       blake3-wasm: 2.1.5
       chokidar: 3.6.0
+      date-fns: 4.1.0
       esbuild: 0.17.19
-      miniflare: 3.20240925.1(bufferutil@4.0.8)(utf-8-validate@6.0.4)
+      itty-time: 1.0.6
+      miniflare: 3.20241022.0(bufferutil@4.0.8)(utf-8-validate@6.0.4)
       nanoid: 3.3.7
       path-to-regexp: 6.3.0
       resolve: 1.22.8
       resolve.exports: 2.0.2
       selfsigned: 2.4.1
       source-map: 0.6.1
-      unenv: /unenv-nightly@2.0.0-20240919-125358-9a64854
-      workerd: 1.20240925.0
+      unenv: /unenv-nightly@2.0.0-20241018-011344-e666fcf
+      workerd: 1.20241022.0
       xxhash-wasm: 1.0.2
     optionalDependencies:
       fsevents: 2.3.3
@@ -25515,7 +25532,7 @@ packages:
     dev: false
 
   file:projects/account.tgz(@types/node@20.11.19)(esbuild@0.20.1)(ts-node@10.9.2):
-    resolution: {integrity: sha512-duOFkzCRppNR6RuL9NSfuJoOTnsRRmC8QO8FmT80PlX4+I9X22KpWvgWHM/1I2RKzjDt1AL+W8zH4toqwL/D5g==, tarball: file:projects/account.tgz}
+    resolution: {integrity: sha512-+9NImKSWaw7ql16FYKMBVp1so+L0pBmrxkROFzsoqH9SgUFD9LnaLbAo9oUMvqd+e9zMYZVBNJ3Aq564UFoBtA==, tarball: file:projects/account.tgz}
     id: file:projects/account.tgz
     name: '@rush-temp/account'
     version: 0.0.0
@@ -25536,7 +25553,7 @@ packages:
       mongodb: 6.9.0-dev.20241016.sha.3d5bd513
       node-fetch: 2.7.0
       otp-generator: 4.0.1
-      pg: 8.12.0
+      pg: 8.13.0
       prettier: 3.2.5
       ts-jest: 29.1.2(esbuild@0.20.1)(jest@29.7.0)(typescript@5.3.3)
       typescript: 5.3.3
@@ -26623,12 +26640,12 @@ packages:
     dev: false
 
   file:projects/cloud-branding.tgz(@types/node@20.11.19)(bufferutil@4.0.8)(esbuild@0.20.1)(ts-node@10.9.2)(utf-8-validate@6.0.4):
-    resolution: {integrity: sha512-f1NgjqZw48X0+O4cblNzjU8SeW4RYnvaMvYNFyN+eKbqTDHI1N97+q5f2OoDgRonvaZa+CXMETNFXMSkniWwyA==, tarball: file:projects/cloud-branding.tgz}
+    resolution: {integrity: sha512-v2M98zCVMnLF7zQw5YBqezBKFkpvu4FdZkTX+162rSiT/FplqDYExu3g0e5n2QuDE0F8YqrBBtrTc5y1ysCiSA==, tarball: file:projects/cloud-branding.tgz}
     id: file:projects/cloud-branding.tgz
     name: '@rush-temp/cloud-branding'
     version: 0.0.0
     dependencies:
-      '@cloudflare/workers-types': 4.20241004.0
+      '@cloudflare/workers-types': 4.20241022.0
       '@types/jest': 29.5.12
       '@typescript-eslint/eslint-plugin': 6.21.0(@typescript-eslint/parser@6.21.0)(eslint@8.56.0)(typescript@5.6.2)
       '@typescript-eslint/parser': 6.21.0(eslint@8.56.0)(typescript@5.6.2)
@@ -26642,7 +26659,7 @@ packages:
       prettier: 3.2.5
       ts-jest: 29.1.2(esbuild@0.20.1)(jest@29.7.0)(typescript@5.6.2)
       typescript: 5.6.2
-      wrangler: 3.80.2(@cloudflare/workers-types@4.20241004.0)(bufferutil@4.0.8)(utf-8-validate@6.0.4)
+      wrangler: 3.83.0(@cloudflare/workers-types@4.20241022.0)(bufferutil@4.0.8)(utf-8-validate@6.0.4)
     transitivePeerDependencies:
       - '@babel/core'
       - '@jest/types'
@@ -26658,12 +26675,12 @@ packages:
     dev: false
 
   file:projects/cloud-datalake.tgz(@types/node@20.11.19)(bufferutil@4.0.8)(esbuild@0.20.1)(ts-node@10.9.2)(utf-8-validate@6.0.4):
-    resolution: {integrity: sha512-KdKIEaVTjeWtCEUYfkvyrIYxglGcfM8iICOnTxRzPiVmOIP3kswu7PaUKeH/xeFZQcvRBvhtNI7XT0dBr5mODA==, tarball: file:projects/cloud-datalake.tgz}
+    resolution: {integrity: sha512-cXJLMX7iOytboFU5rkUlSpFDVWe65X5Tr5kQnUEoDBH8bALze4L0JcXdMAchCjluJZMBBJWZOMKV+8GnihzUdg==, tarball: file:projects/cloud-datalake.tgz}
     id: file:projects/cloud-datalake.tgz
     name: '@rush-temp/cloud-datalake'
     version: 0.0.0
     dependencies:
-      '@cloudflare/workers-types': 4.20241004.0
+      '@cloudflare/workers-types': 4.20241022.0
       '@types/jest': 29.5.12
       '@typescript-eslint/eslint-plugin': 6.21.0(@typescript-eslint/parser@6.21.0)(eslint@8.56.0)(typescript@5.6.2)
       '@typescript-eslint/parser': 6.21.0(eslint@8.56.0)(typescript@5.6.2)
@@ -26680,7 +26697,7 @@ packages:
       prettier: 3.2.5
       ts-jest: 29.1.2(esbuild@0.20.1)(jest@29.7.0)(typescript@5.6.2)
       typescript: 5.6.2
-      wrangler: 3.80.2(@cloudflare/workers-types@4.20241004.0)(bufferutil@4.0.8)(utf-8-validate@6.0.4)
+      wrangler: 3.83.0(@cloudflare/workers-types@4.20241022.0)(bufferutil@4.0.8)(utf-8-validate@6.0.4)
     transitivePeerDependencies:
       - '@babel/core'
       - '@jest/types'
@@ -26689,6 +26706,42 @@ packages:
       - babel-plugin-macros
       - bufferutil
       - esbuild
+      - node-notifier
+      - supports-color
+      - ts-node
+      - utf-8-validate
+    dev: false
+
+  file:projects/cloud-transactor.tgz(@types/node@20.11.19)(bufferutil@4.0.8)(ts-node@10.9.2)(utf-8-validate@6.0.4):
+    resolution: {integrity: sha512-xhR2rJ3iXSlWkTOpEBnKketx8s2i/QnHrYrDN39yWCRmi6Ll31gzDoW4xEyN3Joyck4w/SGZjHPva1pan/ncjA==, tarball: file:projects/cloud-transactor.tgz}
+    id: file:projects/cloud-transactor.tgz
+    name: '@rush-temp/cloud-transactor'
+    version: 0.0.0
+    dependencies:
+      '@cloudflare/workers-types': 4.20241022.0
+      '@types/jest': 29.5.12
+      '@typescript-eslint/eslint-plugin': 6.21.0(@typescript-eslint/parser@6.21.0)(eslint@8.56.0)(typescript@5.6.2)
+      '@typescript-eslint/parser': 6.21.0(eslint@8.56.0)(typescript@5.6.2)
+      esbuild: 0.20.1
+      eslint: 8.56.0
+      eslint-config-standard-with-typescript: 40.0.0(@typescript-eslint/eslint-plugin@6.21.0)(eslint-plugin-import@2.29.1)(eslint-plugin-n@15.7.0)(eslint-plugin-promise@6.1.1)(eslint@8.56.0)(typescript@5.6.2)
+      eslint-plugin-import: 2.29.1(eslint@8.56.0)
+      eslint-plugin-n: 15.7.0(eslint@8.56.0)
+      eslint-plugin-promise: 6.1.1(eslint@8.56.0)
+      itty-router: 5.0.18
+      jest: 29.7.0(@types/node@20.11.19)(ts-node@10.9.2)
+      postgres: 3.4.4
+      prettier: 3.2.5
+      ts-jest: 29.1.2(esbuild@0.20.1)(jest@29.7.0)(typescript@5.6.2)
+      typescript: 5.6.2
+      wrangler: 3.83.0(@cloudflare/workers-types@4.20241022.0)(bufferutil@4.0.8)(utf-8-validate@6.0.4)
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@jest/types'
+      - '@types/node'
+      - babel-jest
+      - babel-plugin-macros
+      - bufferutil
       - node-notifier
       - supports-color
       - ts-node
@@ -31619,7 +31672,7 @@ packages:
     dev: false
 
   file:projects/postgres.tgz(esbuild@0.20.1)(ts-node@10.9.2):
-    resolution: {integrity: sha512-qZVG4Pk9RAvQfkKRB1iQPPOWsKFvFuFyNBtD/ksT/eW0/ByyGABvYMeQPNenrh3ZH2n/hZ5lH5DON042MXebPg==, tarball: file:projects/postgres.tgz}
+    resolution: {integrity: sha512-1syGGO+Ko5H0ypim6P4RJniFhF1LHtkERM3V9rgPkzj4KNMotn+HzKufOiZXRfxYHh8Lea3D52ZDpICaYhxyag==, tarball: file:projects/postgres.tgz}
     id: file:projects/postgres.tgz
     name: '@rush-temp/postgres'
     version: 0.0.0
@@ -31635,7 +31688,8 @@ packages:
       eslint-plugin-n: 15.7.0(eslint@8.56.0)
       eslint-plugin-promise: 6.1.1(eslint@8.56.0)
       jest: 29.7.0(@types/node@20.11.19)(ts-node@10.9.2)
-      pg: 8.12.0
+      pg: 8.13.0
+      postgres: 3.4.4
       prettier: 3.2.5
       ts-jest: 29.1.2(esbuild@0.20.1)(jest@29.7.0)(typescript@5.3.3)
       typescript: 5.3.3
@@ -36071,7 +36125,7 @@ packages:
     dev: false
 
   file:projects/tool.tgz(bufferutil@4.0.8)(utf-8-validate@6.0.4):
-    resolution: {integrity: sha512-dgOs2ysRWXhSAqAdgds7tTLssdROYsTidpPcozKPLpcQnZsmn0Gs42t/y577rd0diONe8AWyXmUcfJMpj0b0mg==, tarball: file:projects/tool.tgz}
+    resolution: {integrity: sha512-VVep2xbY/lZpDdYfUtp3Jp3I8DXwkP7c/YO79BXVf2ZAnMpmvEYjltr1KFA+f5276YX3YLXaVgTtxIwhX3xjkg==, tarball: file:projects/tool.tgz}
     id: file:projects/tool.tgz
     name: '@rush-temp/tool'
     version: 0.0.0
@@ -36102,7 +36156,7 @@ packages:
       libphonenumber-js: 1.10.56
       mime-types: 2.1.35
       mongodb: 6.9.0-dev.20241016.sha.3d5bd513
-      pg: 8.12.0
+      pg: 8.13.0
       prettier: 3.2.5
       ts-jest: 29.1.2(esbuild@0.20.1)(jest@29.7.0)(typescript@5.3.3)
       ts-node: 10.9.2(@types/node@20.11.19)(typescript@5.3.3)
