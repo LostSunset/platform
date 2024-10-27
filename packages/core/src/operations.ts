@@ -313,8 +313,8 @@ export class TxOperations implements Omit<Client, 'notify'> {
     return this.removeDoc(doc._class, doc.space, doc._id)
   }
 
-  apply (scope?: string, measure?: string): ApplyOperations {
-    return new ApplyOperations(this, scope, measure)
+  apply (scope?: string, measure?: string, derived?: boolean): ApplyOperations {
+    return new ApplyOperations(this, scope, measure, derived ?? this.isDerived)
   }
 
   async diffUpdate<T extends Doc = Doc>(
@@ -444,7 +444,8 @@ export class ApplyOperations extends TxOperations {
   constructor (
     readonly ops: TxOperations,
     readonly scope?: string,
-    readonly measureName?: string
+    readonly measureName?: string,
+    isDerived?: boolean
   ) {
     const txClient: Client = {
       getHierarchy: () => ops.client.getHierarchy(),
@@ -460,7 +461,7 @@ export class ApplyOperations extends TxOperations {
         return {}
       }
     }
-    super(txClient, ops.user)
+    super(txClient, ops.user, isDerived ?? false)
   }
 
   match<T extends Doc>(_class: Ref<Class<T>>, query: DocumentQuery<T>): ApplyOperations {

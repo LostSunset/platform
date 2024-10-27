@@ -72,8 +72,6 @@ async function processFixJsonMarkupFor (
   db: Db,
   storageAdapter: StorageAdapter
 ): Promise<void> {
-  console.log('processing', domain, _class)
-
   const collection = db.collection<Doc>(domain)
   const docs = await collection.find({ _class }).toArray()
   for (const doc of docs) {
@@ -119,8 +117,6 @@ async function processFixJsonMarkupFor (
       }
     }
   }
-
-  console.log('...processed', docs.length)
 }
 
 export async function migrateMarkup (
@@ -151,12 +147,9 @@ export async function migrateMarkup (
     const collection = workspaceDb.collection(domain)
 
     const filter = hierarchy.isMixin(_class) ? { [_class]: { $exists: true } } : { _class }
-
-    const count = await collection.countDocuments(filter)
     const iterator = collection.find<Doc>(filter)
 
     try {
-      console.log('processing', _class, '->', count)
       await processMigrateMarkupFor(ctx, hierarchy, storageAdapter, workspaceId, attributes, iterator, concurrency)
     } finally {
       await iterator.close()
@@ -199,7 +192,7 @@ async function processMigrateMarkupFor (
           if (blob === undefined) {
             try {
               const ydoc = markupToYDoc(value, attribute.name)
-              await saveCollaborativeDoc(storageAdapter, workspaceId, collaborativeDoc, ydoc, ctx)
+              await saveCollaborativeDoc(ctx, storageAdapter, workspaceId, collaborativeDoc, ydoc)
             } catch (err) {
               console.error('failed to process document', doc._class, doc._id, err)
             }
@@ -298,7 +291,7 @@ export async function restoreLostMarkup (
             console.log(doc._class, doc._id, attr.name, markup)
             if (command === 'restore') {
               const ydoc = markupToYDoc(markup, attr.name)
-              await saveCollaborativeDoc(storageAdapter, workspaceId, value, ydoc, ctx)
+              await saveCollaborativeDoc(ctx, storageAdapter, workspaceId, value, ydoc)
             }
             restored = true
             break
@@ -329,7 +322,7 @@ export async function restoreLostMarkup (
                 console.log(doc._class, doc._id, attr.name, markup)
                 if (command === 'restore') {
                   const ydoc = markupToYDoc(markup, attr.name)
-                  await saveCollaborativeDoc(storageAdapter, workspaceId, value, ydoc, ctx)
+                  await saveCollaborativeDoc(ctx, storageAdapter, workspaceId, value, ydoc)
                 }
               }
             }

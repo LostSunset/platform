@@ -201,6 +201,7 @@ export async function configurePlatform (): Promise<void> {
   ipcMain.setTitle(title)
 
   setMetadata(login.metadata.AccountsUrl, config.ACCOUNTS_URL)
+  setMetadata(login.metadata.DisableSignUp, config.DISABLE_SIGNUP === 'true')
   setMetadata(presentation.metadata.UploadURL, config.UPLOAD_URL)
   setMetadata(presentation.metadata.FilesURL, config.FILES_URL)
   setMetadata(presentation.metadata.CollaboratorUrl, config.COLLABORATOR_URL)
@@ -305,7 +306,7 @@ export async function configurePlatform (): Promise<void> {
   addLocation(printId, () => import(/* webpackChunkName: "print" */ '@hcengineering/print-resources'))
   addLocation(textEditorId, () => import(/* webpackChunkName: "text-editor" */ '@hcengineering/text-editor-resources'))
 
-  setMetadata(client.metadata.FilterModel, true)
+  setMetadata(client.metadata.FilterModel, 'ui')
   setMetadata(client.metadata.ExtraPlugins, ['preference' as Plugin])
 
   // Use binary response transfer for faster performance and small transfer sizes.

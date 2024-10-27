@@ -151,7 +151,7 @@ export interface Config {
   BRANDING_URL?: string
   TELEGRAM_BOT_URL?: string
   AI_URL?:string
-
+  DISABLE_SIGNUP?: string
   // Could be defined for dev environment
   FRONT_URL?: string
   PREVIEW_CONFIG?: string
@@ -292,6 +292,7 @@ export async function configurePlatform() {
   // tryOpenInDesktopApp(config.APP_PROTOCOL ?? 'huly://')
 
   setMetadata(login.metadata.AccountsUrl, config.ACCOUNTS_URL)
+  setMetadata(login.metadata.DisableSignUp, config.DISABLE_SIGNUP === 'true')
   setMetadata(presentation.metadata.FilesURL, config.FILES_URL)
   setMetadata(presentation.metadata.UploadURL, config.UPLOAD_URL)
   setMetadata(presentation.metadata.CollaboratorUrl, config.COLLABORATOR_URL)
@@ -397,7 +398,7 @@ export async function configurePlatform() {
   addLocation(textEditorId, () => import(/* webpackChunkName: "text-editor" */ '@hcengineering/text-editor-resources'))
   addLocation(uploaderId, () => import(/* webpackChunkName: "uploader" */ '@hcengineering/uploader-resources'))
 
-  setMetadata(client.metadata.FilterModel, true)
+  setMetadata(client.metadata.FilterModel, 'ui')
   setMetadata(client.metadata.ExtraPlugins, ['preference' as Plugin])
 
   // Use binary response transfer for faster performance and small transfer sizes.

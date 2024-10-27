@@ -74,13 +74,6 @@ export function serveWorkspaceAccount (
     process.exit(1)
   }
 
-  // Required by the tool
-  const dbUri = process.env.MONGO_URL
-  if (dbUri === undefined) {
-    console.log('Please provide mongodb url')
-    process.exit(1)
-  }
-
   const waitTimeout = parseInt(process.env.WAIT_TIMEOUT ?? '5000')
 
   setMetadata(serverToken.metadata.Secret, serverSecret)
@@ -97,6 +90,8 @@ export function serveWorkspaceAccount (
 
   setMetadata(serverNotification.metadata.InboxOnlyNotifications, true)
 
+  let canceled = false
+
   const worker = new WorkspaceWorker(
     version,
     txes,
@@ -107,17 +102,22 @@ export function serveWorkspaceAccount (
     brandings
   )
 
-  void worker.start(measureCtx, {
-    errorHandler: async (ws, err) => {
-      Analytics.handleError(err)
+  void worker.start(
+    measureCtx,
+    {
+      errorHandler: async (ws, err) => {
+        Analytics.handleError(err)
+      },
+      force: false,
+      console: false,
+      logs: 'upgrade-logs',
+      waitTimeout
     },
-    force: false,
-    console: false,
-    logs: 'upgrade-logs',
-    waitTimeout
-  })
+    () => canceled
+  )
 
   const close = (): void => {
+    canceled = true
     onClose?.()
   }
 
