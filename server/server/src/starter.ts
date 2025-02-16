@@ -1,19 +1,15 @@
 export interface ServerEnv {
   dbUrl: string
   mongoUrl?: string
-  elasticUrl: string
+  fulltextUrl: string
   serverSecret: string
-  rekoniUrl: string
   frontUrl: string
   filesUrl: string | undefined
   sesUrl: string | undefined
+  sesAuthToken: string | undefined
   accountsUrl: string
   serverPort: number
   enableCompression: boolean
-  elasticIndexName: string
-  pushPublicKey: string | undefined
-  pushPrivateKey: string | undefined
-  pushSubject: string | undefined
   brandingPath: string | undefined
 }
 
@@ -29,26 +25,15 @@ export function serverConfigFromEnv (): ServerEnv {
 
   const mongoUrl = process.env.MONGO_URL
 
-  const elasticUrl = process.env.ELASTIC_URL
-  if (elasticUrl === undefined) {
-    console.error('please provide elastic url')
-    process.exit(1)
-  }
-  const elasticIndexName = process.env.ELASTIC_INDEX_NAME
-  if (elasticIndexName === undefined) {
-    console.log('Please provide ELASTIC_INDEX_NAME')
+  const fulltextUrl = process.env.FULLTEXT_URL
+  if (fulltextUrl === undefined) {
+    console.error('please provide Fulltext URL')
     process.exit(1)
   }
 
   const serverSecret = process.env.SERVER_SECRET
   if (serverSecret === undefined) {
     console.log('Please provide server secret')
-    process.exit(1)
-  }
-
-  const rekoniUrl = process.env.REKONI_URL
-  if (rekoniUrl === undefined) {
-    console.log('Please provide REKONI_URL url')
     process.exit(1)
   }
 
@@ -60,6 +45,7 @@ export function serverConfigFromEnv (): ServerEnv {
 
   const filesUrl = process.env.FILES_URL
   const sesUrl = process.env.SES_URL
+  const sesAuthToken = process.env.SES_AUTH_TOKEN
 
   const accountsUrl = process.env.ACCOUNTS_URL
   if (accountsUrl === undefined) {
@@ -67,27 +53,20 @@ export function serverConfigFromEnv (): ServerEnv {
     process.exit(1)
   }
 
-  const pushPublicKey = process.env.PUSH_PUBLIC_KEY
-  const pushPrivateKey = process.env.PUSH_PRIVATE_KEY
-  const pushSubject = process.env.PUSH_SUBJECT
   const brandingPath = process.env.BRANDING_PATH
 
   return {
     dbUrl,
     mongoUrl,
-    elasticUrl,
-    elasticIndexName,
+    fulltextUrl,
     serverSecret,
-    rekoniUrl,
     frontUrl,
     filesUrl,
     sesUrl,
+    sesAuthToken,
     accountsUrl,
     serverPort,
     enableCompression,
-    pushPublicKey,
-    pushPrivateKey,
-    pushSubject,
     brandingPath
   }
 }

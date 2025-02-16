@@ -33,10 +33,9 @@ import core, {
   type TxCUD,
   TxProcessor,
   type TxResult,
-  type WorkspaceId
+  type WorkspaceIds
 } from '@hcengineering/core'
 import { type DbAdapter, type DbAdapterHandler, type DomainHelperOperations } from './adapter'
-
 /**
  * @public
  */
@@ -101,10 +100,18 @@ export class DummyDbAdapter implements DbAdapter {
 
   async clean (ctx: MeasureContext, domain: Domain, docs: Ref<Doc>[]): Promise<void> {}
 
-  async update (ctx: MeasureContext, domain: Domain, operations: Map<Ref<Doc>, DocumentUpdate<Doc>>): Promise<void> {}
+  getDomainHash (ctx: MeasureContext, domain: Domain): Promise<string> {
+    // Return '' for empty documents content.
+    return Promise.resolve('')
+  }
 
-  async groupBy<T>(ctx: MeasureContext, domain: Domain, field: string): Promise<Set<T>> {
-    return new Set()
+  async groupBy<T, P extends Doc>(
+    ctx: MeasureContext,
+    domain: Domain,
+    field: string,
+    query?: DocumentQuery<P>
+  ): Promise<Map<T, number>> {
+    return new Map()
   }
 
   async rawFindAll<T extends Doc>(domain: Domain, query: DocumentQuery<T>, options?: FindOptions<T>): Promise<T[]> {
@@ -128,20 +135,20 @@ class InMemoryAdapter extends DummyDbAdapter implements DbAdapter {
     this.modeldb = new ModelDb(hierarchy)
   }
 
-  async findAll<T extends Doc>(
+  findAll<T extends Doc>(
     ctx: MeasureContext,
     _class: Ref<Class<T>>,
     query: DocumentQuery<T>,
     options?: FindOptions<T>
   ): Promise<FindResult<T>> {
-    return await this.modeldb.findAll(_class, query, options)
+    return ctx.withSync('inmem-find', {}, () => this.modeldb.findAll(_class, query, options))
   }
 
-  async load (ctx: MeasureContext, domain: Domain, docs: Ref<Doc>[]): Promise<Doc[]> {
-    return await this.modeldb.findAll(core.class.Doc, { _id: { $in: docs } })
+  load (ctx: MeasureContext, domain: Domain, docs: Ref<Doc>[]): Promise<Doc[]> {
+    return this.modeldb.findAll(core.class.Doc, { _id: { $in: docs } })
   }
 
-  async tx (ctx: MeasureContext, ...tx: Tx[]): Promise<TxResult[]> {
+  tx (ctx: MeasureContext, ...tx: Tx[]): Promise<TxResult[]> {
     // Filter transactions with broadcast only flags
     const ftx = tx.filter((it) => {
       if (TxProcessor.isExtendsCUD(it._class)) {
@@ -156,9 +163,9 @@ class InMemoryAdapter extends DummyDbAdapter implements DbAdapter {
       return true
     })
     if (ftx.length === 0) {
-      return []
+      return Promise.resolve([])
     }
-    return await this.modeldb.tx(...ftx)
+    return this.modeldb.tx(...ftx)
   }
 }
 
@@ -167,9 +174,10 @@ class InMemoryAdapter extends DummyDbAdapter implements DbAdapter {
  */
 export async function createInMemoryAdapter (
   ctx: MeasureContext,
+  contextVars: Record<string, any>,
   hierarchy: Hierarchy,
   url: string,
-  workspaceId: WorkspaceId
+  workspaceId: WorkspaceIds
 ): Promise<DbAdapter> {
   return new InMemoryAdapter(hierarchy)
 }

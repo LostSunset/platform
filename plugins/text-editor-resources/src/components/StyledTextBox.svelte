@@ -30,7 +30,7 @@
   import { ImageUploadExtension } from './extension/imageUploadExt'
   import { InlineCommandsExtension } from './extension/inlineCommands'
   import { type FileAttachFunction } from './extension/types'
-  import { completionConfig, inlineCommandsConfig } from './extensions'
+  import { completionConfig, InlineCommandId, inlineCommandsConfig } from './extensions'
 
   export let label: IntlString | undefined = undefined
   export let content: Markup
@@ -199,10 +199,12 @@
     }
 
     if (enableInlineCommands) {
+      const excludedInlineCommands: InlineCommandId[] = ['drawing-board', 'todo-list']
+
+      if (attachFile === undefined) excludedInlineCommands.push('image')
+
       extensions.push(
-        InlineCommandsExtension.configure(
-          inlineCommandsConfig(handleCommandSelected, attachFile === undefined ? ['image'] : [])
-        )
+        InlineCommandsExtension.configure(inlineCommandsConfig(handleCommandSelected, excludedInlineCommands))
       )
     }
 
@@ -226,10 +228,12 @@
       }
       case 'code-block':
         editor.editorHandler.insertCodeBlock(pos)
-
         break
       case 'separator-line':
         editor.editorHandler.insertSeparatorLine()
+        break
+      case 'mermaid':
+        editor.getEditor()?.commands.insertContentAt(pos, { type: 'mermaid' })
         break
     }
   }

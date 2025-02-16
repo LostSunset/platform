@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 
-import { type Class, DOMAIN_MODEL, type Ref, type Space, type AccountRole } from '@hcengineering/core'
+import { type Class, DOMAIN_MODEL, type Ref, type Space, type AccountRole, type PersonId } from '@hcengineering/core'
 import { type Builder, Mixin, Model, Prop, TypeRef, UX } from '@hcengineering/model'
 import preference, { TPreference } from '@hcengineering/model-preference'
 import { createAction } from '@hcengineering/model-view'
@@ -41,7 +41,8 @@ import workbench from './plugin'
 
 export { workbenchId } from '@hcengineering/workbench'
 export { workbenchOperation } from './migration'
-export type { Application }
+export type { Application, Widget }
+export { WidgetType } from '@hcengineering/workbench'
 
 @Model(workbench.class.Application, core.class.Doc, DOMAIN_MODEL)
 @UX(workbench.string.Application)
@@ -80,6 +81,7 @@ export class TWidget extends TDoc implements Widget {
 
   component!: AnyComponent
   tabComponent?: AnyComponent
+  switcherComponent?: AnyComponent
   headerLabel?: IntlString
 
   closeIfNoTabs?: boolean
@@ -104,6 +106,7 @@ export class TTxSidebarEvent extends TTx implements TxSidebarEvent {
 @Model(workbench.class.WorkbenchTab, preference.class.Preference)
 @UX(workbench.string.Tab)
 export class TWorkbenchTab extends TPreference implements WorkbenchTab {
+  declare attachedTo: PersonId
   location!: string
   name?: string
   isPinned!: boolean

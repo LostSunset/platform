@@ -114,7 +114,6 @@ export default mergeIds(recruitId, recruit, {
     HasNoActiveApplicant: '' as IntlString,
     NoneApplications: '' as IntlString,
 
-    MatchVacancy: '' as IntlString,
     VacancyMatching: '' as IntlString,
     Score: '' as IntlString,
     Match: '' as IntlString,
@@ -128,7 +127,8 @@ export default mergeIds(recruitId, recruit, {
     OpenVacancyList: '' as IntlString,
     Export: '' as IntlString,
     GetTalentIds: '' as IntlString,
-    CreateNewSkills: '' as IntlString
+    CreateNewSkills: '' as IntlString,
+    SwapFirstAndLastNames: '' as IntlString
   },
   category: {
     Other: '' as Ref<TagCategory>,

@@ -32,13 +32,10 @@ import {
   TChatMessage,
   TChatMessageViewlet,
   TChatSyncInfo,
-  TChunterExtension,
   TChunterSpace,
   TDirectMessage,
-  TInlineButton,
   TObjectChatPanel,
-  TThreadMessage,
-  TTypingInfo
+  TThreadMessage
 } from './types'
 
 export { chunterId } from '@hcengineering/chunter'
@@ -54,10 +51,7 @@ export function createModel (builder: Builder): void {
     TThreadMessage,
     TChatMessageViewlet,
     TObjectChatPanel,
-    TChatSyncInfo,
-    TInlineButton,
-    TTypingInfo,
-    TChunterExtension
+    TChatSyncInfo
   )
 
   builder.createDoc(
@@ -159,10 +153,6 @@ export function createModel (builder: Builder): void {
 
   builder.mixin(chunter.class.ThreadMessage, core.class.Class, view.mixin.ObjectPresenter, {
     presenter: chunter.component.ThreadMessagePresenter
-  })
-
-  builder.mixin(chunter.class.TypingInfo, core.class.Class, core.mixin.TransientConfiguration, {
-    broadcastOnly: true
   })
 
   builder.createDoc(
@@ -273,27 +263,27 @@ export function createModel (builder: Builder): void {
 
   builder.createDoc(activity.class.ActivityExtension, core.space.Model, {
     ofClass: chunter.class.Channel,
-    components: { input: chunter.component.ChatMessageInput }
+    components: { input: { component: chunter.component.ChatMessageInput } }
   })
 
   builder.createDoc(activity.class.ActivityExtension, core.space.Model, {
     ofClass: chunter.class.DirectMessage,
-    components: { input: chunter.component.ChatMessageInput }
+    components: { input: { component: chunter.component.ChatMessageInput } }
   })
 
   builder.createDoc(activity.class.ActivityExtension, core.space.Model, {
     ofClass: activity.class.DocUpdateMessage,
-    components: { input: chunter.component.ChatMessageInput }
+    components: { input: { component: chunter.component.ChatMessageInput } }
   })
 
   builder.createDoc(activity.class.ActivityExtension, core.space.Model, {
     ofClass: chunter.class.ChatMessage,
-    components: { input: chunter.component.ChatMessageInput }
+    components: { input: { component: chunter.component.ChatMessageInput } }
   })
 
   builder.createDoc(activity.class.ActivityExtension, core.space.Model, {
     ofClass: activity.class.ActivityReference,
-    components: { input: chunter.component.ChatMessageInput }
+    components: { input: { component: chunter.component.ChatMessageInput } }
   })
 
   // Indexing
@@ -314,6 +304,11 @@ export function createModel (builder: Builder): void {
 
   defineActions(builder)
   defineNotifications(builder)
+
+  builder.mixin(chunter.class.ChatSyncInfo, core.class.Class, core.mixin.IndexConfiguration, {
+    indexes: [],
+    searchDisabled: true
+  })
 }
 
 export default chunter

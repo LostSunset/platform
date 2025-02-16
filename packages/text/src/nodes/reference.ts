@@ -13,41 +13,8 @@
 // limitations under the License.
 //
 
-import { Class, Doc, Ref } from '@hcengineering/core'
 import { Node, mergeAttributes } from '@tiptap/core'
-import { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { getDataAttribute } from './utils'
-
-/**
- * @public
- */
-export interface Reference {
-  objectId: Ref<Doc>
-  objectClass: Ref<Class<Doc>>
-  parentNode: ProseMirrorNode | null
-}
-
-/**
- * @public
- */
-export function extractReferences (content: ProseMirrorNode): Array<Reference> {
-  const result: Array<Reference> = []
-
-  content.descendants((node, _pos, parent): boolean => {
-    if (node.type.name === ReferenceNode.name) {
-      const objectId = node.attrs.id as Ref<Doc>
-      const objectClass = node.attrs.objectclass as Ref<Class<Doc>>
-      const e = result.find((e) => e.objectId === objectId && e.objectClass === objectClass)
-      if (e === undefined) {
-        result.push({ objectId, objectClass, parentNode: parent })
-      }
-    }
-
-    return true
-  })
-
-  return result
-}
 
 export interface ReferenceOptions {
   renderLabel: (props: { options: ReferenceOptions, node: any }) => string
@@ -84,7 +51,22 @@ export const ReferenceNode = Node.create<ReferenceOptions>({
   parseHTML () {
     return [
       {
-        tag: `span[data-type="${this.name}"]`
+        tag: `span[data-type="${this.name}"]`,
+        getAttrs: (el) => {
+          const id = (el as HTMLSpanElement).getAttribute('id')?.trim()
+          const label = (el as HTMLSpanElement).getAttribute('label')?.trim()
+          const objectclass = (el as HTMLSpanElement).getAttribute('objectclass')?.trim()
+
+          if (id == null || label == null || objectclass == null) {
+            return false
+          }
+
+          return {
+            id,
+            label,
+            objectclass
+          }
+        }
       }
     ]
   },

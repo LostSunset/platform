@@ -26,7 +26,6 @@ import {
   Collection,
   Doc,
   DocData,
-  DocIndexState,
   DOMAIN_BLOB,
   DOMAIN_DOC_INDEX_STATE,
   DOMAIN_MODEL,
@@ -35,12 +34,17 @@ import {
   IndexKind,
   Obj,
   Permission,
+  PersonId,
   Ref,
   Role,
   roleOrder,
+  SocialId,
+  SocialIdType,
+  SocialKey,
   Space,
   TypedSpace,
   WorkspaceMode,
+  type Domain,
   type PluginConfiguration
 } from './classes'
 import core from './component'
@@ -78,6 +82,11 @@ function count (): string {
  */
 export function generateId<T extends Doc> (join: string = ''): Ref<T> {
   return (timestamp() + join + random + join + count()) as Ref<T>
+}
+
+export function generateUuid (): string {
+  // Consider own implementation if it will be slow
+  return crypto.randomUUID()
 }
 
 /** @public */
@@ -120,38 +129,12 @@ export function toFindResult<T extends Doc> (docs: T[], total?: number, lookupMa
   return Object.assign(docs, { total: length, lookupMap })
 }
 
-/**
- * @public
- */
-export interface WorkspaceId {
-  name: string
-}
-
-/**
- * @public
- */
-export interface WorkspaceIdWithUrl extends WorkspaceId {
-  workspaceUrl: string
-  workspaceName: string
-}
-
-/**
- * @public
- *
- * Previously was combining workspace with productId, if not equal ''
- * Now just returning workspace as is. Keeping it to simplify further refactoring of ws id.
- */
-export function getWorkspaceId (workspace: string): WorkspaceId {
-  return {
-    name: workspace
-  }
-}
-
-/**
- * @public
- */
-export function toWorkspaceString (id: WorkspaceId): string {
-  return id.name
+export type WorkspaceUuid = string & { __workspaceUuid: true }
+export type WorkspaceDataId = string & { __workspaceDataId: true }
+export interface WorkspaceIds {
+  uuid: WorkspaceUuid
+  url: string
+  dataId?: WorkspaceDataId // Old workspace identifier. E.g. Database name in Mongo, bucket in R2, etc.
 }
 
 /**
@@ -165,72 +148,11 @@ export function isWorkspaceCreating (mode?: WorkspaceMode): boolean {
   return ['pending-creation', 'creating'].includes(mode)
 }
 
-const attributesPrefix = 'attributes.'
-
 /**
  * @public
  */
-export interface IndexKeyOptions {
-  _class?: Ref<Class<Obj>>
-  docId?: Ref<DocIndexState>
-  extra?: string[]
-  digest?: boolean
-}
-/**
- * @public
- */
-
-export function docUpdKey (name: string, opt?: IndexKeyOptions): string {
-  return attributesPrefix + docKey(name, opt)
-}
-/**
- * @public
- */
-export function docKey (name: string, opt?: IndexKeyOptions): string {
-  const extra = opt?.extra !== undefined && opt?.extra?.length > 0 ? `#${opt.extra?.join('#') ?? ''}` : ''
-  const digestName = opt?.digest === true ? name + '^digest' : name
-  return opt?._class === undefined ? digestName : `${opt?._class}%${digestName}${extra}`
-}
-
-/**
- * @public
- */
-export function extractDocKey (key: string): {
-  _class?: Ref<Class<Doc>>
-  attr: string
-  docId?: Ref<DocIndexState>
-  extra: string[]
-  digest: boolean
-} {
-  let k = key
-  if (k.startsWith(attributesPrefix)) {
-    k = k.slice(attributesPrefix.length)
-  }
-  let docId: Ref<DocIndexState> | undefined
-  let _class: Ref<Class<Doc>> | undefined
-  let attr = ''
-  const docSepPos = k.indexOf('|')
-  if (docSepPos !== -1) {
-    docId = k.substring(0, docSepPos).replace('_', '.') as Ref<DocIndexState>
-    k = k.substring(docSepPos + 1)
-  }
-  const clPos = k.indexOf('%')
-  if (clPos !== -1) {
-    _class = k.substring(0, clPos) as Ref<Class<Doc>>
-    attr = k.substring(clPos + 1)
-  } else {
-    attr = k
-  }
-  const extra = attr.split('#')
-  attr = extra.splice(0, 1)[0]
-  const digestPos = attr.indexOf('^digest')
-  let digest = false
-  if (digestPos !== -1) {
-    attr = attr.substring(0, digestPos)
-    digest = true
-  }
-
-  return { docId, attr, _class, extra, digest }
+export function docKey (name: string, _class?: Ref<Class<Doc>>): string {
+  return _class === undefined || _class !== core.class.Doc ? name : `${_class}%${name}`
 }
 
 /**
@@ -413,7 +335,11 @@ export class RateLimiter {
   }
 
   async waitProcessing (): Promise<void> {
-    await Promise.all(this.processingQueue.values())
+    while (this.processingQueue.size > 0) {
+      await new Promise<void>((resolve) => {
+        this.notify.push(resolve)
+      })
+    }
   }
 }
 
@@ -611,6 +537,14 @@ export function cutObjectArray (obj: any): any {
   return r
 }
 
+export function includesAny (arr1: string[] | null | undefined, arr2: string[] | null | undefined): boolean {
+  if (arr1 == null || arr1.length === 0 || arr2 == null || arr2.length === 0) {
+    return false
+  }
+
+  return arr1.some((m) => arr2.includes(m))
+}
+
 export const isEnum =
   <T>(e: T) =>
     (token: any): token is T[keyof T] => {
@@ -634,7 +568,7 @@ export async function checkPermission (
 
   const me = getCurrentAccount()
   const asMixin = client.getHierarchy().as(space, mixin)
-  const myRoles = type.$lookup?.roles?.filter((role) => (asMixin as any)[role._id]?.includes(me._id)) as Role[]
+  const myRoles = type.$lookup?.roles?.filter((role) => includesAny((asMixin as any)[role._id], me.socialIds)) as Role[]
 
   if (myRoles === undefined) {
     return false
@@ -744,7 +678,9 @@ export function isClassIndexable (
     domain === DOMAIN_TX ||
     domain === DOMAIN_MODEL ||
     domain === DOMAIN_BLOB ||
+    domain === ('preference' as Domain) ||
     domain === DOMAIN_TRANSIENT ||
+    domain === ('settings' as Domain) ||
     domain === DOMAIN_BENCHMARK
   ) {
     hierarchy.setClassifierProp(c, 'class_indexed', false)
@@ -892,4 +828,103 @@ export function pluginFilterTx (
   console.log('exclude plugin', msg)
   systemTx = systemTx.filter((t) => !totalExcluded.has(t._id))
   return systemTx
+}
+
+/**
+ * @public
+ */
+export class TimeRateLimiter {
+  idCounter: number = 0
+  active: number = 0
+  last: number = 0
+  rate: number
+  period: number
+  executions: { time: number, running: boolean }[] = []
+
+  queue: (() => Promise<void>)[] = []
+  notify: (() => void)[] = []
+
+  constructor (rate: number, period: number = 1000) {
+    this.rate = rate
+    this.period = period
+  }
+
+  private cleanupExecutions (): void {
+    const now = Date.now()
+    this.executions = this.executions.filter((time) => time.running || now - time.time < this.period)
+  }
+
+  async exec<T, B extends Record<string, any> = any>(op: (args?: B) => Promise<T>, args?: B): Promise<T> {
+    while (this.active >= this.rate || this.executions.length >= this.rate) {
+      this.cleanupExecutions()
+      if (this.executions.length < this.rate) {
+        break
+      }
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, this.period / this.rate)
+      })
+    }
+
+    const v = { time: Date.now(), running: true }
+    try {
+      this.executions.push(v)
+      const p = op(args)
+      this.active++
+      return await p
+    } finally {
+      v.running = false
+      this.active--
+      this.cleanupExecutions()
+      const n = this.notify.shift()
+      if (n !== undefined) {
+        n()
+      }
+    }
+  }
+
+  async waitProcessing (): Promise<void> {
+    while (this.active > 0) {
+      console.log('wait', this.active)
+      await new Promise<void>((resolve) => {
+        this.notify.push(resolve)
+      })
+    }
+  }
+}
+
+export function combineAttributes (
+  attributes: any[],
+  key: string,
+  operator: '$push' | '$pull',
+  arrayKey: '$each' | '$in'
+): any[] {
+  return Array.from(
+    new Set(
+      attributes.flatMap((attr) =>
+        Array.isArray(attr[operator]?.[key]?.[arrayKey]) ? attr[operator]?.[key]?.[arrayKey] : attr[operator]?.[key]
+      )
+    )
+  ).filter((v) => v != null)
+}
+
+export function buildSocialIdString (key: SocialKey): PersonId {
+  return `${key.type}:${key.value}` as PersonId
+}
+
+export function parseSocialIdString (id: PersonId): SocialKey {
+  const [type, value] = id.split(':')
+
+  return { type: type as SocialIdType, value }
+}
+
+export function pickPrimarySocialId (socialIds: SocialId[]): SocialId {
+  if (socialIds.length === 0) {
+    throw new Error('No social ids provided')
+  }
+
+  return socialIds[0]
+}
+
+export function notEmpty<T> (id: T | undefined | null): id is T {
+  return id !== undefined && id !== null && id !== ''
 }

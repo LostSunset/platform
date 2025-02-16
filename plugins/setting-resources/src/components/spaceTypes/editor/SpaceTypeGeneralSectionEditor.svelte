@@ -15,7 +15,7 @@
 <script lang="ts">
   import contact from '@hcengineering/contact'
   import { AccountArrayEditor } from '@hcengineering/contact-resources'
-  import core, { Account, reduceCalls, Ref, type SpaceType, type SpaceTypeDescriptor } from '@hcengineering/core'
+  import core, { PersonId, reduceCalls, type SpaceType, type SpaceTypeDescriptor } from '@hcengineering/core'
   import { createQuery, getClient, MessageBox } from '@hcengineering/presentation'
   import {
     ButtonIcon,
@@ -47,10 +47,12 @@
       core.class.TypedSpace,
       { type: type._id },
       (res) => {
-        spacesCount = res.length
+        spacesCount = res.total
         loading = false
       },
       {
+        total: true,
+        limit: 1,
         projection: { _id: 1 }
       }
     )
@@ -68,13 +70,13 @@
     await client.update(type, { [field]: value })
   }
 
-  const changeMembers = reduceCalls(async function changeMembers (members: Ref<Account>[]): Promise<void> {
+  const changeMembers = reduceCalls(async function changeMembers (members: PersonId[]): Promise<void> {
     if (disabled || type === undefined) {
       return
     }
 
-    const push = new Set<Ref<Account>>(members)
-    const pull = new Set<Ref<Account>>()
+    const push = new Set<PersonId>(members)
+    const pull = new Set<PersonId>()
     for (const member of (type.members ?? []).filter((it, idx, arr) => arr.indexOf(it) === idx)) {
       if (!push.has(member)) {
         pull.add(member)
