@@ -28,7 +28,9 @@ import {
   type WorkspaceInfoWithStatus as WorkspaceInfoWithStatusCore,
   isActiveMode,
   type PersonUuid,
-  type PersonId
+  type PersonId,
+  type Person,
+  buildSocialIdString
 } from '@hcengineering/core'
 import { getMongoClient } from '@hcengineering/mongo' // TODO: get rid of this import later
 import platform, { getMetadata, PlatformError, Severity, Status, translate } from '@hcengineering/platform'
@@ -56,7 +58,7 @@ import {
   AccountEventType
 } from './types'
 import { Analytics } from '@hcengineering/analytics'
-import { decodeTokenVerbose, generateToken } from '@hcengineering/server-token'
+import { TokenError, decodeTokenVerbose, generateToken } from '@hcengineering/server-token'
 
 export const GUEST_ACCOUNT = 'b6996120-416f-49cd-841e-e4a5d2e49c9b'
 
@@ -127,7 +129,7 @@ export function wrap (
             ? err.status
             : new Status(Severity.ERROR, platform.status.InternalServerError, {})
 
-        if (((err.message as string) ?? '') === 'Signature verification failed') {
+        if (err instanceof TokenError) {
           // Let's send un authorized
           return {
             error: new Status(Severity.ERROR, platform.status.Unauthorized, {})
@@ -177,7 +179,11 @@ const toTransactor = (line: string): { internalUrl: string, region: string, exte
   return { internalUrl: internalUrl ?? '', region: region ?? '', externalUrl: externalUrl ?? internalUrl ?? '' }
 }
 
-const getEndpoints = (): string[] => {
+/**
+ * Internal. Exported for testing only.
+ * @returns list of endpoints
+ */
+export const getEndpoints = (): string[] => {
   const transactorsUrl = getMetadata(accountPlugin.metadata.Transactors)
   if (transactorsUrl === undefined) {
     throw new Error('Please provide transactor endpoint url')
@@ -198,24 +204,35 @@ let regionInfo: RegionInfo[] = []
 
 export const getRegions = (): RegionInfo[] => {
   if (regionInfo.length === 0) {
-    const endpoints = getEndpoints()
-      .map(toTransactor)
-      .map((it) => ({ region: it.region.trim(), name: '' }))
-    if (process.env.REGION_INFO !== undefined) {
-      regionInfo = process.env.REGION_INFO.split(';')
-        .map((it) => it.split('|'))
-        .map((it) => ({ region: it[0].trim(), name: it[1].trim() }))
-      // We need to add all endpoints if they are not in info.
-      for (const endpoint of endpoints) {
-        if (regionInfo.find((it) => it.region === endpoint.region) === undefined) {
-          regionInfo.push(endpoint)
-        }
-      }
-    } else {
-      regionInfo = endpoints
-    }
+    regionInfo = _getRegions()
   }
   return regionInfo
+}
+
+/**
+ * Internal. Exported for tests only.
+ * @returns list of endpoints
+ */
+export const _getRegions = (): RegionInfo[] => {
+  let _regionInfo: RegionInfo[] = []
+  const endpoints = getEndpoints()
+    .map(toTransactor)
+    .map((it) => ({ region: it.region.trim(), name: '' }))
+  if (process.env.REGION_INFO !== undefined) {
+    _regionInfo = process.env.REGION_INFO.split(';')
+      .map((it) => it.split('|'))
+      .map((it) => ({ region: it[0].trim(), name: it[1].trim() }))
+    // We need to add all endpoints if they are not in info.
+    for (const endpoint of endpoints) {
+      if (_regionInfo.find((it) => it.region === endpoint.region) === undefined) {
+        _regionInfo.push(endpoint)
+      }
+    }
+  } else {
+    _regionInfo = endpoints
+  }
+
+  return _regionInfo
 }
 
 export const getEndpoint = (
@@ -288,8 +305,9 @@ export function cleanEmail (email: string): string {
 }
 
 export function isEmail (email: string): boolean {
+  // RFC 5322 compliant email regex
   const EMAIL_REGEX =
-    /(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))/
+    /^[a-zA-Z0-9](?:[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-](?:\.?[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-])*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?|\[(?:(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9]))\.){3}(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])|[a-zA-Z0-9-]*[a-zA-Z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])$/ // eslint-disable-line no-control-regex
   return EMAIL_REGEX.test(email)
 }
 
@@ -378,6 +396,7 @@ export async function sendOtpEmail (
     ctx.error('Please provide email service url to enable email otp')
     return
   }
+  const sesAuth = getMetadata(accountPlugin.metadata.SES_AUTH_TOKEN)
 
   const lang = branding?.language
   const app = branding?.title ?? getMetadata(accountPlugin.metadata.ProductName)
@@ -390,7 +409,8 @@ export async function sendOtpEmail (
   await fetch(concatLink(sesURL, '/send'), {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...(sesAuth != null ? { Authorization: `Bearer ${sesAuth}` } : {})
     },
     body: JSON.stringify({
       text,
@@ -559,6 +579,11 @@ export async function selectWorkspace (
 
       throw new PlatformError(new Status(Severity.ERROR, platform.status.WorkspaceNotFound, { workspaceUrl }))
     }
+  }
+
+  const person = await db.person.findOne({ uuid: accountUuid })
+  if (person == null) {
+    throw new PlatformError(new Status(Severity.ERROR, platform.status.InternalServerError, {}))
   }
 
   return {
@@ -735,6 +760,8 @@ export async function sendEmailConfirmation (
     throw new PlatformError(new Status(Severity.ERROR, platform.status.InternalServerError, {}))
   }
 
+  const sesAuth = getMetadata(accountPlugin.metadata.SES_AUTH_TOKEN)
+
   const front = branding?.front ?? getMetadata(accountPlugin.metadata.FrontURL)
   if (front === undefined || front === '') {
     ctx.error('Please provide front url via branding configuration or FRONT_URL variable')
@@ -756,7 +783,8 @@ export async function sendEmailConfirmation (
   await fetch(concatLink(sesURL, '/send'), {
     method: 'post',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...(sesAuth != null ? { Authorization: `Bearer ${sesAuth}` } : {})
     },
     body: JSON.stringify({
       text,
@@ -863,14 +891,15 @@ export async function getEmailSocialId (db: AccountDB, email: string): Promise<S
   return await db.socialId.findOne({ type: SocialIdType.EMAIL, value: email })
 }
 
-export function getSesUrl (): string {
+export function getSesUrl (): { sesURL: string, sesAuth: string | undefined } {
   const sesURL = getMetadata(accountPlugin.metadata.SES_URL)
 
   if (sesURL === undefined || sesURL === '') {
     throw new Error('Please provide email service url')
   }
+  const sesAuth = getMetadata(accountPlugin.metadata.SES_AUTH_TOKEN)
 
-  return sesURL
+  return { sesURL, sesAuth }
 }
 
 export function getFrontUrl (branding: Branding | null): string {
@@ -964,6 +993,12 @@ export async function loginOrSignUpWithProvider (
     throw new PlatformError(new Status(Severity.ERROR, platform.status.InternalServerError, {}))
   }
 
+  const person = await db.person.findOne({ uuid: personUuid })
+
+  if (person == null) {
+    throw new PlatformError(new Status(Severity.ERROR, platform.status.InternalServerError, {}))
+  }
+
   const account = await db.account.findOne({ uuid: personUuid })
 
   if (account == null) {
@@ -1005,6 +1040,8 @@ export async function loginOrSignUpWithProvider (
 
   return {
     account: personUuid,
+    socialId: buildSocialIdString(socialId),
+    name: getPersonName(person),
     token: generateToken(personUuid)
   }
 }
@@ -1111,5 +1148,68 @@ export async function getWorkspaces (
 export function verifyAllowedServices (services: string[], extra: any): void {
   if (!services.includes(extra?.service) && extra?.admin !== 'true') {
     throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
+  }
+}
+
+export function getPersonName (person: Person): string {
+  // Should we control the order by config?
+  return `${person.firstName} ${person.lastName}`
+}
+
+interface EmailInfo {
+  text: string
+  html: string
+  subject: string
+  to: string
+}
+
+export async function sendEmail (info: EmailInfo): Promise<void> {
+  const { text, html, subject, to } = info
+  const { sesURL, sesAuth } = getSesUrl()
+  await fetch(concatLink(sesURL, '/send'), {
+    method: 'post',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(sesAuth != null ? { Authorization: `Bearer ${sesAuth}` } : {})
+    },
+    body: JSON.stringify({
+      text,
+      html,
+      subject,
+      to
+    })
+  })
+}
+
+export async function getInviteEmail (
+  branding: Branding | null,
+  email: string,
+  inviteId: string,
+  workspace: Workspace,
+  expHours: number,
+  resend = false
+): Promise<EmailInfo> {
+  const front = getFrontUrl(branding)
+  const link = concatLink(front, `/login/join?inviteId=${inviteId}`)
+  const ws = workspace.name !== '' ? workspace.name : workspace.url
+  const lang = branding?.language
+
+  return {
+    text: await translate(
+      resend ? accountPlugin.string.ResendInviteText : accountPlugin.string.InviteText,
+      { link, ws, expHours },
+      lang
+    ),
+    html: await translate(
+      resend ? accountPlugin.string.ResendInviteHTML : accountPlugin.string.InviteHTML,
+      { link, ws, expHours },
+      lang
+    ),
+    subject: await translate(
+      resend ? accountPlugin.string.ResendInviteSubject : accountPlugin.string.InviteSubject,
+      { ws },
+      lang
+    ),
+    to: email
   }
 }

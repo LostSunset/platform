@@ -17,7 +17,7 @@
 import { generateId, type WorkspaceIds } from '@hcengineering/core'
 import { StorageConfiguration, initStatisticsContext } from '@hcengineering/server-core'
 import { buildStorageFromConfig } from '@hcengineering/server-storage'
-import { getClient as getAccountClientRaw, AccountClient, WorkspaceLoginInfo } from '@hcengineering/account-client'
+import { getClient as getAccountClientRaw, AccountClient, isWorkspaceLoginInfo } from '@hcengineering/account-client'
 import cors from 'cors'
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 import { IncomingHttpHeaders, type Server } from 'http'
@@ -104,8 +104,8 @@ const handleRequest = async (
 ): Promise<void> => {
   try {
     const token = extractToken(req.headers, req.query)
-    const wsLoginInfo = (await getAccountClient(token).getLoginInfoByToken()) as WorkspaceLoginInfo
-    if (wsLoginInfo?.workspace === undefined) {
+    const wsLoginInfo = await getAccountClient(token).getLoginInfoByToken()
+    if (!isWorkspaceLoginInfo(wsLoginInfo)) {
       throw new ApiError(401, "Couldn't find workspace with the provided token")
     }
     const wsIds = {
@@ -124,9 +124,13 @@ const wrapRequest = (fn: AsyncRequestHandler) => (req: Request, res: Response, n
   handleRequest(fn, req, res, next)
 }
 
-export function createServer (storageConfig: StorageConfiguration): { app: Express, close: () => void } {
+export function createServer (
+  storageConfig: StorageConfiguration,
+  allowedHostnames: string[]
+): { app: Express, close: () => void } {
   const storageAdapter = buildStorageFromConfig(storageConfig)
   const measureCtx = initStatisticsContext('print', {})
+  const whitelistedHostnames = allowedHostnames.length > 0 ? new Set(allowedHostnames) : null
 
   const app = express()
   app.use(cors())
@@ -134,9 +138,20 @@ export function createServer (storageConfig: StorageConfiguration): { app: Expre
 
   app.get(
     '/print',
-    wrapRequest(async (req, res, wsIds) => {
+    wrapRequest(async (req, res, wsIds, token) => {
       const rawlink = req.query.link as string
       const link = decodeURIComponent(rawlink)
+
+      // Verify that link is from the same host and protocol is among the allowed
+      const url = new URL(link)
+      if (
+        !['http:', 'https:'].includes(url.protocol) ||
+        (whitelistedHostnames != null && !whitelistedHostnames.has(url.hostname))
+      ) {
+        console.error(`Rejected processing unexpected link: ${link}. Token: ${JSON.stringify(token)}`)
+        throw new ApiError(403, 'Cannot process provided link')
+      }
+
       const kind = req.query.kind as PrintOptions['kind']
 
       if (kind !== undefined && !validKinds.includes(kind as any)) {

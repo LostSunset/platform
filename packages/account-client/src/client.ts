@@ -24,7 +24,8 @@ import {
   type WorkspaceInfoWithStatus,
   type WorkspaceMemberInfo,
   WorkspaceMode,
-  concatLink
+  concatLink,
+  type WorkspaceUserOperation
 } from '@hcengineering/core'
 import platform, { PlatformError, Severity, Status } from '@hcengineering/platform'
 import type { LoginInfo, OtpInfo, WorkspaceLoginInfo, RegionInfo, WorkspaceOperation } from './types'
@@ -47,7 +48,8 @@ export interface AccountClient {
   restorePassword: (password: string) => Promise<LoginInfo>
   confirm: () => Promise<LoginInfo>
   requestPasswordReset: (email: string) => Promise<void>
-  sendInvite: (email: string, role?: AccountRole) => Promise<void>
+  sendInvite: (email: string, role: AccountRole) => Promise<void>
+  resendInvite: (email: string, role: AccountRole) => Promise<void>
   leaveWorkspace: (account: string) => Promise<LoginInfo | null>
   changeUsername: (first: string, last: string) => Promise<void>
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>
@@ -99,7 +101,7 @@ export interface AccountClient {
   listWorkspaces: (region?: string | null, mode?: WorkspaceMode | null) => Promise<WorkspaceInfoWithStatus[]>
   performWorkspaceOperation: (
     workspaceId: string | string[],
-    event: 'archive' | 'migrate-to' | 'unarchive' | 'delete',
+    event: WorkspaceUserOperation,
     ...params: any
   ) => Promise<boolean>
   assignWorkspace: (email: string, workspaceUuid: string, role: AccountRole) => Promise<void>
@@ -254,9 +256,18 @@ class AccountClientImpl implements AccountClient {
     await this.rpc(request)
   }
 
-  async sendInvite (email: string, role?: AccountRole): Promise<void> {
+  async sendInvite (email: string, role: AccountRole): Promise<void> {
     const request = {
       method: 'sendInvite' as const,
+      params: [email, role]
+    }
+
+    await this.rpc(request)
+  }
+
+  async resendInvite (email: string, role: AccountRole): Promise<void> {
+    const request = {
+      method: 'resendInvite' as const,
       params: [email, role]
     }
 
@@ -517,7 +528,7 @@ class AccountClientImpl implements AccountClient {
 
   async performWorkspaceOperation (
     workspaceId: string | string[],
-    event: 'archive' | 'migrate-to' | 'unarchive' | 'delete',
+    event: WorkspaceUserOperation,
     ...params: any
   ): Promise<boolean> {
     const request = {

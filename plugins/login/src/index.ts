@@ -29,7 +29,7 @@ export const loginId = 'login' as Plugin
 export default plugin(loginId, {
   metadata: {
     AccountsUrl: '' as Asset,
-    LoginTokens: '' as Metadata<Record<string, string>>,
+    LoginTokensV2: '' as Metadata<Record<string, string>>,
     LastToken: '' as Metadata<string>,
     LoginEndpoint: '' as Metadata<string>,
     LoginAccount: '' as Metadata<string>,
@@ -64,8 +64,8 @@ export default plugin(loginId, {
     WorkspaceArchivedDesc: '' as IntlString
   },
   function: {
-    SendInvite: '' as Resource<(email: string, role?: AccountRole) => Promise<void>>,
-    ResendInvite: '' as Resource<(inviteId: string) => Promise<void>>,
+    SendInvite: '' as Resource<(email: string, role: AccountRole) => Promise<void>>,
+    ResendInvite: '' as Resource<(email: string, role: AccountRole) => Promise<void>>,
     GetInviteLink: '' as Resource<
     (
       expHours: number,

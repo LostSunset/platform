@@ -72,7 +72,7 @@
       'auth'
     ]
     if (token === undefined ? !allowedUnauthPages.includes(page) : !pages.includes(page)) {
-      const tokens = fetchMetadataLocalStorage(login.metadata.LoginTokens)
+      const tokens = fetchMetadataLocalStorage(login.metadata.LoginTokensV2)
       page = tokens != null ? 'login' : 'signup'
     }
 
@@ -143,7 +143,7 @@
             {#if page === 'login'}
               <LoginForm {navigateUrl} {signUpDisabled} />
             {:else if page === 'signup'}
-              <SignupForm {signUpDisabled} />
+              <SignupForm {navigateUrl} {signUpDisabled} />
             {:else if page === 'createWorkspace'}
               <CreateWorkspaceForm />
             {:else if page === 'password'}

@@ -20,7 +20,9 @@ import {
   type Person,
   type Doc,
   type Ref,
-  type WorkspaceInfoWithStatus
+  type WorkspaceInfoWithStatus,
+  type WorkspaceUserOperation,
+  parseSocialIdString
 } from '@hcengineering/core'
 import type { LoginInfo, OtpInfo, WorkspaceLoginInfo, AccountClient, RegionInfo } from '@hcengineering/account-client'
 import { getClient as getAccountClientRaw } from '@hcengineering/account-client'
@@ -217,11 +219,9 @@ export async function getWorkspaces (): Promise<WorkspaceInfoWithStatus[]> {
 
 export async function performWorkspaceOperation (
   workspace: string | string[],
-  operation: 'archive' | 'migrate-to' | 'unarchive' | 'delete',
+  operation: WorkspaceUserOperation,
   ...params: any[]
 ): Promise<boolean> {
-  // TODO: this method requires a special admin token
-  // consider how to obtain it
   const token = getMetadata(presentation.metadata.Token)
   if (token === undefined) {
     const loc = getCurrentLocation()
@@ -245,8 +245,6 @@ export async function performWorkspaceOperation (
 }
 
 export async function getAllWorkspaces (): Promise<WorkspaceInfoWithStatus[]> {
-  // TODO: this method requires a special admin token
-  // consider how to obtain it
   const token = getMetadata(presentation.metadata.Token)
   if (token === undefined) {
     const loc = getCurrentLocation()
@@ -423,12 +421,12 @@ export async function getPerson (): Promise<[Status, Person | null]> {
 }
 
 export function setLoginInfo (loginInfo: WorkspaceLoginInfo): void {
-  const tokens: Record<string, string> = fetchMetadataLocalStorage(login.metadata.LoginTokens) ?? {}
+  const tokens: Record<string, string> = fetchMetadataLocalStorage(login.metadata.LoginTokensV2) ?? {}
   tokens[loginInfo.workspaceUrl] = loginInfo.token
 
   setMetadata(presentation.metadata.Token, loginInfo.token)
   setMetadataLocalStorage(login.metadata.LastToken, loginInfo.token)
-  setMetadataLocalStorage(login.metadata.LoginTokens, tokens)
+  setMetadataLocalStorage(login.metadata.LoginTokensV2, tokens)
   setMetadataLocalStorage(login.metadata.LoginEndpoint, loginInfo.endpoint)
   setMetadataLocalStorage(login.metadata.LoginAccount, loginInfo.account)
 }
@@ -471,7 +469,7 @@ export async function checkJoined (inviteId: string): Promise<[Status, Workspace
   let token = getMetadata(presentation.metadata.Token)
 
   if (token == null) {
-    const tokens: Record<string, string> = fetchMetadataLocalStorage(login.metadata.LoginTokens) ?? {}
+    const tokens: Record<string, string> = fetchMetadataLocalStorage(login.metadata.LoginTokensV2) ?? {}
     token = Object.values(tokens)[0]
     if (token == null) {
       return [unknownStatus('Please login'), null]
@@ -627,7 +625,7 @@ export async function leaveWorkspace (account: string): Promise<LoginInfo | null
   return await getAccountClient().leaveWorkspace(account)
 }
 
-export async function sendInvite (email: string, role?: AccountRole): Promise<void> {
+export async function sendInvite (email: string, role: AccountRole): Promise<void> {
   try {
     await getAccountClient().sendInvite(email, role)
   } catch (e) {
@@ -636,32 +634,13 @@ export async function sendInvite (email: string, role?: AccountRole): Promise<vo
   }
 }
 
-export async function resendInvite (email: string): Promise<void> {
-  // TODO: FIXME
-  throw new Error('Not implemented')
-  // const accountsUrl = getMetadata(login.metadata.AccountsUrl)
-
-  // if (accountsUrl === undefined) {
-  //   throw new Error('accounts url not specified')
-  // }
-
-  // const token = getMetadata(presentation.metadata.Token) as string
-
-  // const params = [email]
-
-  // const request = {
-  //   method: 'resendInvite',
-  //   params
-  // }
-
-  // await fetch(accountsUrl, {
-  //   method: 'POST',
-  //   headers: {
-  //     Authorization: 'Bearer ' + token,
-  //     'Content-Type': 'application/json'
-  //   },
-  //   body: JSON.stringify(request)
-  // })
+export async function resendInvite (email: string, role: AccountRole): Promise<void> {
+  try {
+    await getAccountClient().resendInvite(email, role)
+  } catch (e) {
+    console.log('Failed to resend invite', email, role)
+    console.error(e)
+  }
 }
 
 export async function requestPassword (email: string): Promise<Status> {
@@ -898,4 +877,21 @@ export async function doLoginNavigate (
 
 export function isWorkspaceLoginInfo (info: WorkspaceLoginInfo | LoginInfo | null): info is WorkspaceLoginInfo {
   return (info as any)?.workspace !== undefined
+}
+
+export function getAccountDisplayName (loginInfo: LoginInfo | null): string {
+  if (loginInfo == null) {
+    return ''
+  }
+
+  if (loginInfo.name != null) {
+    return loginInfo.name
+  }
+
+  if (loginInfo.socialId != null) {
+    const { value } = parseSocialIdString(loginInfo.socialId)
+    return value
+  }
+
+  return loginInfo.account
 }

@@ -32,7 +32,8 @@ import {
   type WorkspaceMemberInfo,
   type WorkspaceMode,
   type WorkspaceUuid,
-  type PersonId
+  type PersonId,
+  buildSocialIdString
 } from '@hcengineering/core'
 import platform, {
   getMetadata,
@@ -89,7 +90,10 @@ import {
   signUpByEmail,
   verifyPassword,
   wrap,
-  verifyAllowedServices
+  verifyAllowedServices,
+  getPersonName,
+  sendEmail,
+  getInviteEmail
 } from './utils'
 import { isAdminEmail } from './admin'
 
@@ -125,6 +129,11 @@ export async function login (
       throw new PlatformError(new Status(Severity.ERROR, platform.status.AccountNotFound, {}))
     }
 
+    const person = await db.person.findOne({ uuid: emailSocialId.personUuid })
+    if (person == null) {
+      throw new PlatformError(new Status(Severity.ERROR, platform.status.InternalServerError, {}))
+    }
+
     if (!verifyPassword(password, existingAccount.hash, existingAccount.salt)) {
       throw new PlatformError(new Status(Severity.ERROR, platform.status.AccountNotFound, {}))
     }
@@ -136,7 +145,9 @@ export async function login (
 
     return {
       account: existingAccount.uuid,
-      token: isConfirmed ? generateToken(existingAccount.uuid, undefined, extraToken) : undefined
+      token: isConfirmed ? generateToken(existingAccount.uuid, undefined, extraToken) : undefined,
+      name: getPersonName(person),
+      socialId: emailSocialId.key
     }
   } catch (err: any) {
     Analytics.handleError(err)
@@ -185,6 +196,10 @@ export async function signUp (
   lastName: string
 ): Promise<LoginInfo> {
   const account = await signUpByEmail(ctx, db, branding, email, password, firstName, lastName)
+  const person = await db.person.findOne({ uuid: account })
+  if (person == null) {
+    throw new PlatformError(new Status(Severity.ERROR, platform.status.InternalServerError, {}))
+  }
 
   const sesURL = getMetadata(accountPlugin.metadata.SES_URL)
   const forceConfirmation = sesURL !== undefined && sesURL !== ''
@@ -199,6 +214,8 @@ export async function signUp (
 
   return {
     account,
+    name: getPersonName(person),
+    socialId: buildSocialIdString({ type: SocialIdType.EMAIL, value: email }),
     token: !forceConfirmation ? generateToken(account) : undefined
   }
 }
@@ -223,6 +240,8 @@ export async function signUpOtp (
       ctx.error('An account with the provided email already exists', { email })
       throw new PlatformError(new Status(Severity.ERROR, platform.status.AccountAlreadyExists, {}))
     }
+
+    await db.person.updateOne({ uuid: emailSocialId.personUuid }, { firstName, lastName })
 
     personUuid = emailSocialId.personUuid
   } else {
@@ -277,8 +296,15 @@ export async function validateOtp (
     ctx.info('OTP login success', emailSocialId)
   }
 
+  const person = await db.person.findOne({ uuid: emailSocialId.personUuid })
+  if (person == null) {
+    throw new PlatformError(new Status(Severity.ERROR, platform.status.InternalServerError, {}))
+  }
+
   return {
     account: emailSocialId.personUuid,
+    name: getPersonName(person),
+    socialId: emailSocialId.key,
     token: generateToken(emailSocialId.personUuid)
   }
 }
@@ -308,8 +334,15 @@ export async function createWorkspace (
 
   ctx.info('Creating workspace record done', { workspaceName, region, account: socialId.personUuid })
 
+  const person = await db.person.findOne({ uuid: socialId.personUuid })
+  if (person == null) {
+    throw new PlatformError(new Status(Severity.ERROR, platform.status.InternalServerError, {}))
+  }
+
   return {
     account,
+    socialId: socialId.key,
+    name: getPersonName(person),
     token: generateToken(account, workspaceUuid),
     endpoint: getEndpoint(ctx, workspaceUuid, region, EndpointKind.External),
     workspace: workspaceUuid,
@@ -357,7 +390,7 @@ export async function sendInvite (
   branding: Branding | null,
   token: string,
   email: string,
-  role?: AccountRole
+  role: AccountRole
 ): Promise<void> {
   const { account, workspace: workspaceUuid } = decodeTokenVerbose(ctx, token)
 
@@ -371,35 +404,55 @@ export async function sendInvite (
     throw new PlatformError(new Status(Severity.ERROR, platform.status.WorkspaceNotFound, { workspaceUuid }))
   }
 
-  const sesURL = getSesUrl()
-  const front = getFrontUrl(branding)
   const expHours = 48
   const exp = expHours * 60 * 60 * 1000
-
   const inviteId = await createInviteLink(ctx, db, branding, token, exp, email, 1, role)
-  const link = concatLink(front, `/login/join?inviteId=${inviteId}`)
+  const inviteEmail = await getInviteEmail(branding, email, inviteId, workspace, expHours)
 
-  const ws = workspace.name !== '' ? workspace.name : 'workspace'
-  const lang = branding?.language
-  const text = await translate(accountPlugin.string.InviteText, { link, ws, expHours }, lang)
-  const html = await translate(accountPlugin.string.InviteHTML, { link, ws, expHours }, lang)
-  const subject = await translate(accountPlugin.string.InviteSubject, { ws }, lang)
-  const to = email
+  await sendEmail(inviteEmail)
 
-  await fetch(concatLink(sesURL, '/send'), {
-    method: 'post',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      text,
-      html,
-      subject,
-      to
-    })
+  ctx.info('Invite has been sent', { to: inviteEmail.to, workspaceUuid: workspace.uuid, workspaceName: workspace.name })
+}
+
+export async function resendInvite (
+  ctx: MeasureContext,
+  db: AccountDB,
+  branding: Branding | null,
+  token: string,
+  email: string,
+  role: AccountRole
+): Promise<void> {
+  const { account, workspace: workspaceUuid } = decodeTokenVerbose(ctx, token)
+  const currentAccount = await db.account.findOne({ uuid: account })
+  if (currentAccount == null) {
+    throw new PlatformError(new Status(Severity.ERROR, platform.status.AccountNotFound, { account }))
+  }
+
+  const workspace = await db.workspace.findOne({ uuid: workspaceUuid })
+  if (workspace == null) {
+    throw new PlatformError(new Status(Severity.ERROR, platform.status.WorkspaceNotFound, { workspaceUuid }))
+  }
+
+  const expHours = 48
+  const newExp = Date.now() + expHours * 60 * 60 * 1000
+
+  const invite = await db.invite.findOne({ workspaceUuid, emailPattern: email })
+  let inviteId: string
+  if (invite != null) {
+    inviteId = invite.id
+    await db.invite.updateOne({ id: invite.id }, { expiresOn: newExp, remainingUses: 1, role })
+  } else {
+    inviteId = await createInviteLink(ctx, db, branding, token, newExp, email, 1, role)
+  }
+
+  const inviteEmail = await getInviteEmail(branding, email, inviteId, workspace, expHours, true)
+  await sendEmail(inviteEmail)
+
+  ctx.info('Invite has been resent', {
+    to: inviteEmail.to,
+    workspaceUuid: workspace.uuid,
+    workspaceName: workspace.name
   })
-
-  ctx.info('Invite has been sent', { email, workspace, workspaceName: workspace.name, link })
 }
 
 /**
@@ -534,8 +587,15 @@ export async function confirm (
 
   await confirmEmail(ctx, db, account, email)
 
+  const person = await db.person.findOne({ uuid: account })
+  if (person == null) {
+    throw new PlatformError(new Status(Severity.ERROR, platform.status.InternalServerError, {}))
+  }
+
   const result = {
     account,
+    name: getPersonName(person),
+    socialId: buildSocialIdString({ type: SocialIdType.EMAIL, value: email }),
     token: generateToken(account)
   }
 
@@ -599,7 +659,7 @@ export async function requestPasswordReset (
     )
   }
 
-  const sesURL = getSesUrl()
+  const { sesURL, sesAuth } = getSesUrl()
   const front = getFrontUrl(branding)
 
   const token = generateToken(account.uuid, undefined, {
@@ -615,7 +675,8 @@ export async function requestPasswordReset (
   await fetch(concatLink(sesURL, '/send'), {
     method: 'post',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...(sesAuth != null ? { Authorization: `Bearer ${sesAuth}` } : {})
     },
     body: JSON.stringify({
       text,
@@ -694,8 +755,14 @@ export async function leaveWorkspace (
   ctx.info('Account removed from workspace', { targetAccount, workspace })
 
   if (account === targetAccount) {
+    const person = await db.person.findOne({ uuid: account })
+    if (person == null) {
+      throw new PlatformError(new Status(Severity.ERROR, platform.status.InternalServerError, {}))
+    }
+
     return {
       account,
+      name: getPersonName(person),
       token: generateToken(account, undefined)
     }
   }
@@ -854,7 +921,7 @@ export async function performWorkspaceOperation (
   branding: Branding | null,
   token: string,
   workspaceId: WorkspaceUuid | WorkspaceUuid[],
-  event: 'archive' | 'migrate-to' | 'unarchive' | 'delete',
+  event: 'archive' | 'migrate-to' | 'unarchive' | 'delete' | 'reset-attempts',
   ...params: any
 ): Promise<boolean> {
   const { extra } = decodeTokenVerbose(ctx, token)
@@ -874,6 +941,10 @@ export async function performWorkspaceOperation (
   for (const workspace of workspaces) {
     const update: Partial<WorkspaceStatus> = {}
     switch (event) {
+      case 'reset-attempts':
+        update.processingAttempts = 0
+        update.lastProcessingTime = Date.now() - processingTimeoutMs // To not wait for next step
+        break
       case 'delete':
         if (workspace.status.mode !== 'active') {
           throw new PlatformError(unknownError('Delete allowed only for active workspaces'))
@@ -967,11 +1038,11 @@ export async function getLoginInfoByToken (
 
   const isDocGuest = accountUuid === GUEST_ACCOUNT && extra?.guest === 'true'
   const isSystem = accountUuid === systemAccountUuid
+  let socialId: SocialId | null = null
 
   if (!isDocGuest && !isSystem) {
     // Any confirmed social ID will do
-    const socialId = await db.socialId.findOne({ personUuid: accountUuid, verifiedOn: { $gt: 0 } })
-
+    socialId = await db.socialId.findOne({ personUuid: accountUuid, verifiedOn: { $gt: 0 } })
     if (socialId == null) {
       return {
         account: accountUuid
@@ -979,8 +1050,31 @@ export async function getLoginInfoByToken (
     }
   }
 
+  let person: Person | null
+  if (isDocGuest) {
+    person = {
+      uuid: accountUuid,
+      firstName: 'Guest',
+      lastName: 'User'
+    }
+  } else if (isSystem) {
+    person = {
+      uuid: accountUuid,
+      firstName: 'System',
+      lastName: 'User'
+    }
+  } else {
+    person = await db.person.findOne({ uuid: accountUuid })
+  }
+
+  if (person == null) {
+    throw new PlatformError(new Status(Severity.ERROR, platform.status.InternalServerError, {}))
+  }
+
   const loginInfo = {
     account: accountUuid,
+    name: getPersonName(person),
+    socialId: socialId?.key,
     token
   }
 
@@ -1074,7 +1168,7 @@ export async function getPersonInfo (
 
   return {
     personUuid: account,
-    name: `${person?.firstName} ${person?.lastName}`, // Should we control the order by config?
+    name: getPersonName(person),
     socialIds: verifiedSocialIds.map((it) => it.key)
   }
 }
@@ -1318,6 +1412,7 @@ export async function updateWorkspaceInfo (
     case 'restore-done':
       update.mode = 'active'
       update.processingProgress = 100
+      update.lastProcessingTime = Date.now() - processingTimeoutMs // To not wait for next step
       break
     case 'archiving-backup-started':
       update.mode = 'archiving-backup'
@@ -1450,11 +1545,12 @@ export type AccountMethods =
   | 'login'
   | 'loginOtp'
   | 'signUp'
-  | 'signUpOTP'
+  | 'signUpOtp'
   | 'validateOtp'
   | 'createWorkspace'
   | 'createInviteLink'
   | 'sendInvite'
+  | 'resendInvite'
   | 'selectWorkspace'
   | 'join'
   | 'checkJoin'
@@ -1495,11 +1591,12 @@ export function getMethods (hasSignUp: boolean = true): Partial<Record<AccountMe
     login: wrap(login),
     loginOtp: wrap(loginOtp),
     ...(hasSignUp ? { signUp: wrap(signUp) } : {}),
-    ...(hasSignUp ? { signUpOTP: wrap(signUpOtp) } : {}),
+    ...(hasSignUp ? { signUpOtp: wrap(signUpOtp) } : {}),
     validateOtp: wrap(validateOtp),
     createWorkspace: wrap(createWorkspace),
     createInviteLink: wrap(createInviteLink),
     sendInvite: wrap(sendInvite),
+    resendInvite: wrap(resendInvite),
     selectWorkspace: wrap(selectWorkspace),
     join: wrap(join),
     checkJoin: wrap(checkJoin),
