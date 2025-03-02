@@ -23,17 +23,20 @@ import {
   type Domain,
   type FindOptions,
   type FindResult,
+  type LoadModelResponse,
   type MeasureContext,
+  type PersonId,
+  type PersonUuid,
   type Ref,
   type SearchOptions,
   type SearchQuery,
+  type SearchResult,
   type SessionData,
   type Timestamp,
   type Tx,
   type TxCUD,
-  type PersonId,
-  type WorkspaceDataId,
-  type PersonUuid
+  type TxResult,
+  type WorkspaceDataId
 } from '@hcengineering/core'
 import { PlatformError, unknownError } from '@hcengineering/platform'
 import {
@@ -114,6 +117,11 @@ export class ClientSession implements Session {
     await ctx.sendResponse(ctx.requestId, result)
   }
 
+  async loadModelRaw (ctx: ClientSessionCtx, lastModelTx: Timestamp, hash?: string): Promise<LoadModelResponse | Tx[]> {
+    this.includeSessionContext(ctx)
+    return await ctx.ctx.with('load-model', {}, (_ctx) => ctx.pipeline.loadModel(_ctx, lastModelTx, hash))
+  }
+
   includeSessionContext (ctx: ClientSessionCtx): void {
     const dataId = this.workspace.workspaceDataId ?? (this.workspace.workspaceUuid as unknown as WorkspaceDataId)
     const contextData = new SessionDataImpl(
@@ -164,7 +172,20 @@ export class ClientSession implements Session {
     await ctx.sendResponse(ctx.requestId, await ctx.pipeline.searchFulltext(ctx.ctx, query, options))
   }
 
-  async tx (ctx: ClientSessionCtx, tx: Tx): Promise<void> {
+  async searchFulltextRaw (ctx: ClientSessionCtx, query: SearchQuery, options: SearchOptions): Promise<SearchResult> {
+    this.lastRequest = Date.now()
+    this.includeSessionContext(ctx)
+    return await ctx.pipeline.searchFulltext(ctx.ctx, query, options)
+  }
+
+  async txRaw (
+    ctx: ClientSessionCtx,
+    tx: Tx
+  ): Promise<{
+      result: TxResult
+      broadcastPromise: Promise<void>
+      asyncsPromise: Promise<void> | undefined
+    }> {
     this.lastRequest = Date.now()
     this.total.tx++
     this.current.tx++
@@ -173,31 +194,45 @@ export class ClientSession implements Session {
     let cid = 'client_' + generateId()
     ctx.ctx.id = cid
     let onEnd = useReserveContext ? ctx.pipeline.context.adapterManager?.reserveContext?.(cid) : undefined
+    let result: TxResult
     try {
-      const result = await ctx.pipeline.tx(ctx.ctx, [tx])
-
-      // Send result immideately
-      await ctx.sendResponse(ctx.requestId, result)
-
-      // We need to broadcast all collected transactions
-      await ctx.pipeline.handleBroadcast(ctx.ctx)
+      result = await ctx.pipeline.tx(ctx.ctx, [tx])
     } finally {
       onEnd?.()
     }
+    // Send result immideately
+    await ctx.sendResponse(ctx.requestId, result)
+
+    // We need to broadcast all collected transactions
+    const broadcastPromise = ctx.pipeline.handleBroadcast(ctx.ctx)
 
     // ok we could perform async requests if any
     const asyncs = (ctx.ctx.contextData as SessionData).asyncRequests ?? []
+    let asyncsPromise: Promise<void> | undefined
     if (asyncs.length > 0) {
       cid = 'client_async_' + generateId()
       ctx.ctx.id = cid
       onEnd = useReserveContext ? ctx.pipeline.context.adapterManager?.reserveContext?.(cid) : undefined
-      try {
-        for (const r of (ctx.ctx.contextData as SessionData).asyncRequests ?? []) {
-          await r()
+      const handleAyncs = async (): Promise<void> => {
+        try {
+          for (const r of (ctx.ctx.contextData as SessionData).asyncRequests ?? []) {
+            await r()
+          }
+        } finally {
+          onEnd?.()
         }
-      } finally {
-        onEnd?.()
       }
+      asyncsPromise = handleAyncs()
+    }
+
+    return { result, broadcastPromise, asyncsPromise }
+  }
+
+  async tx (ctx: ClientSessionCtx, tx: Tx): Promise<void> {
+    const { broadcastPromise, asyncsPromise } = await this.txRaw(ctx, tx)
+    await broadcastPromise
+    if (asyncsPromise !== undefined) {
+      await asyncsPromise
     }
   }
 
@@ -214,7 +249,7 @@ export class ClientSession implements Session {
         }
       }
       const bevent = createBroadcastEvent(Array.from(classes))
-      socket.send(
+      void socket.send(
         ctx,
         {
           result: [bevent]
@@ -223,7 +258,7 @@ export class ClientSession implements Session {
         this.useCompression
       )
     } else {
-      socket.send(ctx, { result: tx }, this.binaryMode, this.useCompression)
+      void socket.send(ctx, { result: tx }, this.binaryMode, this.useCompression)
     }
   }
 

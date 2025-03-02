@@ -91,7 +91,7 @@ export interface Timeouts {
   reconnectTimeout: number // Default 3 seconds
 }
 
-class TSessionManager implements SessionManager {
+export class TSessionManager implements SessionManager {
   private readonly statusPromises = new Map<string, Promise<void>>()
   readonly workspaces = new Map<WorkspaceUuid, Workspace>()
   checkInterval: any
@@ -188,7 +188,14 @@ class TSessionManager implements SessionManager {
       if (this.ticks % (60 * ticksPerSecond) === workspace.tickHash) {
         try {
           // update account lastVisit every minute per every workspace.∏
-          void this.getWorkspaceInfo(workspace.token).catch(() => {
+          let connected: boolean = false
+          for (const val of workspace.sessions.values()) {
+            if (val.session.getUser() !== systemAccountUuid) {
+              connected = true
+              break
+            }
+          }
+          void this.getWorkspaceInfo(workspace.token, connected).catch(() => {
             // Ignore
           })
         } catch (err: any) {
@@ -242,7 +249,7 @@ class TSessionManager implements SessionManager {
             // And ping other wize
             s[1].session.lastPing = now
             if (s[1].socket.checkState()) {
-              s[1].socket.send(
+              void s[1].socket.send(
                 workspace.context,
                 { result: pingConst },
                 s[1].session.binaryMode,
@@ -296,9 +303,9 @@ class TSessionManager implements SessionManager {
     return this.sessionFactory(token, workspace, account)
   }
 
-  async getWorkspaceInfo (token: string): Promise<WorkspaceInfoWithStatus | undefined> {
+  async getWorkspaceInfo (token: string, updateLastVisit = true): Promise<WorkspaceInfoWithStatus | undefined> {
     try {
-      return await getAccountClient(this.accountsUrl, token).getWorkspaceInfo(true)
+      return await getAccountClient(this.accountsUrl, token).getWorkspaceInfo(updateLastVisit)
     } catch (err: any) {
       if (err?.cause?.code === 'ECONNRESET' || err?.cause?.code === 'ECONNREFUSED') {
         return undefined
@@ -545,7 +552,7 @@ class TSessionManager implements SessionManager {
     }
 
     if (this.timeMinutes > 0) {
-      ws.send(ctx, { result: this.createMaintenanceWarning() }, session.binaryMode, session.useCompression)
+      void ws.send(ctx, { result: this.createMaintenanceWarning() }, session.binaryMode, session.useCompression)
     }
     return { session, context: workspace.context, workspaceId: workspaceInfo.uuid }
   }
@@ -917,7 +924,7 @@ class TSessionManager implements SessionManager {
   }
 
   private sendUpgrade (ctx: MeasureContext, webSocket: ConnectionSocket, binary: boolean, compression: boolean): void {
-    webSocket.send(
+    void webSocket.send(
       ctx,
       {
         result: {
@@ -980,19 +987,19 @@ class TSessionManager implements SessionManager {
 
   createOpContext (
     ctx: MeasureContext,
+    sendCtx: MeasureContext,
     pipeline: Pipeline,
-    request: Request<any>,
+    requestId: Request<any>['id'],
     service: Session,
-    ws: ConnectionSocket,
-    workspace: WorkspaceUuid
+    ws: ConnectionSocket
   ): ClientSessionCtx {
     const st = platformNow()
     return {
       ctx,
       pipeline,
-      requestId: request.id,
+      requestId,
       sendResponse: (reqId, msg) =>
-        sendResponse(ctx, service, ws, {
+        sendResponse(sendCtx, service, ws, {
           id: reqId,
           result: msg,
           time: platformNowDiff(st),
@@ -1002,9 +1009,9 @@ class TSessionManager implements SessionManager {
       sendPong: () => {
         ws.sendPong()
       },
-      socialStringsToUsers: this.getActiveSocialStringsToUsersMap(workspace),
+      socialStringsToUsers: this.getActiveSocialStringsToUsersMap(service.workspace.workspaceUuid),
       sendError: (reqId, msg, error: Status) =>
-        sendResponse(ctx, service, ws, {
+        sendResponse(sendCtx, service, ws, {
           id: reqId,
           result: msg,
           error,
@@ -1056,7 +1063,7 @@ class TSessionManager implements SessionManager {
           requestCtx.measure('msg-receive-delta', delta)
         }
         if (service.workspace.closing !== undefined) {
-          ws.send(
+          await ws.send(
             ctx,
             {
               id: request.id,
@@ -1072,6 +1079,7 @@ class TSessionManager implements SessionManager {
           return
         }
         if (request.id === -2 && request.method === 'forceClose') {
+          // TODO: we chould allow this only for admin or system accounts
           let done = false
           const wsRef = this.workspaces.get(workspace)
           if (wsRef?.upgrade ?? false) {
@@ -1084,7 +1092,7 @@ class TSessionManager implements SessionManager {
             id: request.id,
             result: done
           }
-          ws.send(ctx, forceCloseResponse, service.binaryMode, service.useCompression)
+          await ws.send(ctx, forceCloseResponse, service.binaryMode, service.useCompression)
           return
         }
 
@@ -1105,18 +1113,75 @@ class TSessionManager implements SessionManager {
         try {
           const params = [...request.params]
 
+          if (ws.isBackpressure()) {
+            await ws.backpressure(ctx)
+          }
+
           await ctx.with('🧨 process', {}, (callTx) =>
-            f.apply(service, [this.createOpContext(callTx, pipeline, request, service, ws, workspace), ...params])
+            f.apply(service, [this.createOpContext(callTx, userCtx, pipeline, request.id, service, ws), ...params])
           )
         } catch (err: any) {
           Analytics.handleError(err)
           if (LOGGING_ENABLED) {
             this.ctx.error('error handle request', { error: err, request })
           }
-          ws.send(
-            ctx,
+          await ws.send(
+            userCtx,
             {
               id: request.id,
+              error: unknownError(err),
+              result: JSON.parse(JSON.stringify(err?.stack))
+            },
+            service.binaryMode,
+            service.useCompression
+          )
+        }
+      })
+      .finally(() => {
+        userCtx.end()
+        service.requests.delete(reqId)
+      })
+  }
+
+  handleRPC<S extends Session>(
+    requestCtx: MeasureContext,
+    service: S,
+    ws: ConnectionSocket,
+    operation: (ctx: ClientSessionCtx) => Promise<void>
+  ): Promise<void> {
+    const userCtx = requestCtx.newChild('📞 client', {})
+
+    // Calculate total number of clients
+    const reqId = generateId()
+
+    const st = Date.now()
+    return userCtx
+      .with('🧭 handleRPC', {}, async (ctx) => {
+        if (service.workspace.closing !== undefined) {
+          throw new Error('Workspace is closing')
+        }
+
+        service.requests.set(reqId, {
+          id: reqId,
+          params: {},
+          start: st
+        })
+
+        const pipeline =
+          service.workspace.pipeline instanceof Promise ? await service.workspace.pipeline : service.workspace.pipeline
+
+        try {
+          const uctx = this.createOpContext(ctx, userCtx, pipeline, reqId, service, ws)
+          await operation(uctx)
+        } catch (err: any) {
+          Analytics.handleError(err)
+          if (LOGGING_ENABLED) {
+            this.ctx.error('error handle request', { error: err })
+          }
+          await ws.send(
+            userCtx,
+            {
+              id: reqId,
               error: unknownError(err),
               result: JSON.parse(JSON.stringify(err?.stack))
             },
@@ -1172,7 +1237,7 @@ class TSessionManager implements SessionManager {
         account: service.getRawAccount(),
         useCompression: service.useCompression
       }
-      ws.send(requestCtx, helloResponse, false, false)
+      await ws.send(requestCtx, helloResponse, false, false)
 
       // We do not need to wait for set-status, just return session to client
       const _workspace = service.workspace

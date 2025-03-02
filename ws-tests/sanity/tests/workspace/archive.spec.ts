@@ -65,6 +65,9 @@ test.describe('Workspace Archive tests', () => {
       const loginPage2 = new LoginPage(adminSecondPage.page)
       await loginPage2.goto()
       await loginPage2.login('admin', '1234')
+      await loginPage2.page.waitForURL((url) => {
+        return url.pathname.startsWith('/login/selectWorkspace') || url.pathname.startsWith('/workbench/')
+      })
 
       const adminPage = new AdminPage(page2)
       await adminPage.gotoAdmin()
@@ -83,8 +86,8 @@ test.describe('Workspace Archive tests', () => {
       await page2.locator(`[id="${workspaceInfo.workspace}"]`).getByText('archived').waitFor()
     })
     await test.step('Check workspace is archived', async () => {
-      await page.reload()
-      await page.getByText('Workspace is archived').waitFor()
+      await page.reload() // Will redirect to select workspace page
+      await page.getByText('archived').waitFor()
     })
     await test.step('Restore workspace', async () => {
       await page2.locator(`[id="${workspaceInfo.workspace}"]`).getByRole('button', { name: 'Unarchive' }).click()
@@ -94,6 +97,8 @@ test.describe('Workspace Archive tests', () => {
     })
     await test.step('Check workspace is active again', async () => {
       await page.reload()
+
+      await selectWorkspacePage.selectWorkspace(workspaceName)
 
       const issuesDetailsPage = new IssuesDetailsPage(page)
       await issuesDetailsPage.checkIssue(newIssue)

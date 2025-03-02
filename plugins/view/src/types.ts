@@ -293,6 +293,13 @@ export interface ObjectIdentifier extends Class<Doc> {
 /**
  * @public
  */
+export interface ReferenceObjectProvider extends Class<Doc> {
+  provider: Resource<<T extends Doc>(client: Client, ref: Ref<T>, doc?: T) => Promise<Doc | undefined>>
+}
+
+/**
+ * @public
+ */
 export interface ObjectTooltip extends Class<Doc> {
   provider: Resource<(client: Client, doc?: Doc | null) => Promise<LabelAndProps | undefined>>
 }
@@ -818,7 +825,7 @@ export interface ViewOptionsModel {
  */
 export interface IconProps {
   icon?: Asset
-  color?: number
+  color?: number | number[]
 }
 
 export type AttributeCategory = 'attribute' | 'inplace' | 'collection' | 'array' | 'object'

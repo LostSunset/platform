@@ -20,7 +20,7 @@
   import Form from './Form.svelte'
 
   import { Analytics } from '@hcengineering/analytics'
-  import { workbenchId } from '@hcengineering/workbench'
+  import { logIn, workbenchId } from '@hcengineering/workbench'
   import { onMount } from 'svelte'
   import { BottomAction } from '..'
   import { loginAction, recoveryAction } from '../actions'
@@ -28,7 +28,7 @@
 
   const location = getCurrentLocation()
   Analytics.handleEvent('invite_link_activated')
-  let page = 'login'
+  let page = 'signUp'
 
   $: fields =
     page === 'login'
@@ -60,7 +60,7 @@
   let status = OK
 
   $: action = {
-    i18n: login.string.Join,
+    i18n: page === 'login' ? login.string.Join : login.string.SignUp,
     func: async () => {
       status = new Status(Severity.INFO, login.status.ConnectingToServer, {})
 
@@ -77,6 +77,7 @@
       status = loginStatus
 
       if (result != null) {
+        await logIn(result)
         setLoginInfo(result)
 
         if (location.query?.navigateUrl != null) {
@@ -96,23 +97,15 @@
     }
   }
 
-  const signUpAction: BottomAction = {
-    caption: login.string.DoNotHaveAnAccount,
-    i18n: login.string.SignUp,
-    func: () => (page = 'signUp')
-  }
-
-  const loginJoinAction: BottomAction = {
-    caption: login.string.HaveAccount,
-    i18n: login.string.LogIn,
-    func: () => (page = 'login')
-  }
-
-  $: bottom = page === 'login' ? [signUpAction] : [loginJoinAction]
-  $: secondaryButtonLabel = page === 'login' ? login.string.SignUp : undefined
-  $: secondaryButtonAction = () => {
-    page = 'signUp'
-  }
+  $: secondaryButtonLabel = page === 'login' ? login.string.SignUp : login.string.Join
+  $: secondaryButtonAction =
+    page === 'login'
+      ? () => {
+          page = 'signUp'
+        }
+      : () => {
+          page = 'login'
+        }
 
   onMount(() => {
     void check()
@@ -150,6 +143,6 @@
   {action}
   {secondaryButtonLabel}
   {secondaryButtonAction}
-  bottomActions={[...bottom, loginAction, recoveryAction]}
+  bottomActions={[loginAction, recoveryAction]}
   withProviders
 />

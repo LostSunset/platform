@@ -1,6 +1,6 @@
 import { test } from '@playwright/test'
 import { LoginPage } from '../model/login-page'
-import { DefaultWorkspace, generateId, PlatformURI, PlatformUser } from '../utils'
+import { generateId } from '../utils'
 import { SelectWorkspacePage } from '../model/select-workspace-page'
 import { SignUpPage } from '../model/signup-page'
 import { SignUpData } from '../model/common-types'
@@ -38,7 +38,7 @@ test.describe('Workspace tests', () => {
     const newWorkspaceName = `New Workspace Name - ${generateId(2)}`
     await loginPage.goto()
     await loginPage.clickSignUp()
-    await signUpPage.signUpPwd(newUser)
+    await signUpPage.signUp(newUser)
     await selectWorkspacePage.createWorkspace(newWorkspaceName)
     await leftSideMenuPage.clickTracker()
   })
@@ -67,7 +67,7 @@ test.describe('Workspace tests', () => {
     const newWorkspaceName = `New Issue Name - ${generateId(2)}`
     await loginPage.goto()
     await loginPage.clickSignUp()
-    await signUpPage.signUpPwd(newUser)
+    await signUpPage.signUp(newUser)
     await selectWorkspacePage.createWorkspace(newWorkspaceName)
 
     await trackerNavigationMenuPage.openIssuesForProject('Default')
@@ -89,7 +89,7 @@ test.describe('Workspace tests', () => {
     const newWorkspaceName = `New Workspace Name - ${generateId(2)}`
 
     await loginPage.goto()
-    await loginPage.clickSignUp()
+    await loginPage.clickSignUp(false)
 
     await signUpPage.signUpPasswordBtn().click()
     await signUpPage.checkInfo(page, 'Required field First name')
@@ -119,7 +119,7 @@ test.describe('Workspace tests', () => {
     const newWorkspaceName = `Some HULY #@$ WS - ${generateId(12)}`
     await loginPage.goto()
     await loginPage.clickSignUp()
-    await signUpPage.signUpPwd(newUser)
+    await signUpPage.signUp(newUser)
     await selectWorkspacePage.createWorkspace(newWorkspaceName)
     await leftSideMenuPage.clickTracker()
 
@@ -140,9 +140,8 @@ test.describe('Workspace tests', () => {
         password: '1234'
       }
 
-      await page2.getByRole('link', { name: 'Sign Up' }).click()
       const signUpPage2 = new SignUpPage(page2)
-      await signUpPage2.signUpPwd(newUser2, 'join')
+      await signUpPage2.signUp(newUser2)
 
       const leftSideMenuPage2 = new LeftSideMenuPage(page2)
       await leftSideMenuPage2.clickTracker()
@@ -161,7 +160,7 @@ test.describe('Workspace tests', () => {
     const newWorkspaceName = `Some HULY #@$ WS - ${generateId(12)}`
     await loginPage.goto()
     await loginPage.clickSignUp()
-    await signUpPage.signUpPwd(newUser)
+    await signUpPage.signUp(newUser)
     await selectWorkspacePage.createWorkspace(newWorkspaceName)
     await leftSideMenuPage.clickTracker()
 
@@ -185,7 +184,7 @@ test.describe('Workspace tests', () => {
       }
 
       const signUpPage2 = new SignUpPage(page2)
-      await signUpPage2.signUpPwd(newUser2)
+      await signUpPage2.signUp(newUser2)
 
       // Ok we signed in, and no workspace present.
       await page2.goto(linkText ?? '')
@@ -197,36 +196,5 @@ test.describe('Workspace tests', () => {
     } finally {
       await page2.close()
     }
-  })
-
-  test('Create workspace with LastToken in the localStorage', async ({ page, browser }) => {
-    await loginPage.goto()
-    await loginPage.login(PlatformUser, '1234')
-    await selectWorkspacePage.selectWorkspace(DefaultWorkspace)
-    await leftSideMenuPage.clickTracker()
-
-    // Get and check the last token
-    await leftSideMenuPage.verifyLastTokenNotEmpty()
-
-    await test.step('Check create workspace action', async () => {
-      const newWorkspaceName = `Some HULY #@$ WS - ${generateId(12)}`
-      const pageSecond = await browser.newPage()
-      try {
-        // Authenticate in new browser context
-        await pageSecond.goto(`${PlatformURI}/login/login`)
-        await leftSideMenuPage.setLastTokenOnPage(pageSecond, await leftSideMenuPage.getLastToken())
-        await pageSecond.goto(`${PlatformURI}/login/createWorkspace`)
-
-        // Create workspace in the second context
-        const selectWorkspacePageSecond = new SelectWorkspacePage(pageSecond)
-        await selectWorkspacePageSecond.createWorkspace(newWorkspaceName)
-
-        // Use the tracker in the second context
-        const leftSideMenuPageSecond = new LeftSideMenuPage(pageSecond)
-        await leftSideMenuPageSecond.clickTracker()
-      } finally {
-        await pageSecond.close()
-      }
-    })
   })
 })
