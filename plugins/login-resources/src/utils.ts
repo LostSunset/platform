@@ -20,9 +20,7 @@ import {
   AccountRole,
   concatLink,
   parseSocialIdString,
-  type Doc,
   type Person,
-  type Ref,
   type WorkspaceInfoWithStatus,
   type WorkspaceUserOperation
 } from '@hcengineering/core'
@@ -41,6 +39,7 @@ import platform, {
 import presentation from '@hcengineering/presentation'
 import {
   getCurrentLocation,
+  isSameSegments,
   locationStorageKeyId,
   locationToUrl,
   navigate,
@@ -297,6 +296,17 @@ export async function getAccount (doNavigate: boolean = true): Promise<LoginInfo
     if (err instanceof PlatformError) {
       await handleStatusError('Get account error', err.status)
 
+      if (err.status.code === platform.status.Unauthorized) {
+        setMetadata(presentation.metadata.Token, null)
+        setMetadataLocalStorage(login.metadata.LoginEndpoint, null)
+
+        const loc = getCurrentLocation()
+        loc.path[1] = 'login'
+        loc.path.length = 2
+        navigate(loc)
+        return null
+      }
+
       return null
     } else {
       Analytics.handleError(err)
@@ -454,11 +464,18 @@ export function navigateToWorkspace (
       // Json parse error could be ignored
     }
   }
-  const last = localStorage.getItem(`${locationStorageKeyId}_${workspaceUrl}`)
-  if (last !== null) {
-    navigate(JSON.parse(last), replace)
+  const newLoc: Location = { path: [workbenchId, workspaceUrl] }
+  let last: Location | undefined
+  try {
+    last = JSON.parse(localStorage.getItem(`${locationStorageKeyId}_${workspaceUrl}`) ?? '')
+  } catch (err: any) {
+    // Ignore
+  }
+  if (last != null && isSameSegments(last, newLoc, 2)) {
+    // If last location in our workspace path, use it.
+    navigate(last, replace)
   } else {
-    navigate({ path: [workbenchId, workspaceUrl] }, replace)
+    navigate(newLoc, replace)
   }
 }
 
@@ -517,8 +534,7 @@ export async function getInviteLinkId (
   expHours: number,
   emailMask: string,
   limit: number,
-  role: AccountRole = AccountRole.User,
-  personId?: Ref<Doc>
+  role: AccountRole = AccountRole.User
 ): Promise<string> {
   const exp = expHours < 0 ? -1 : expHours * 1000 * 60 * 60
   const token = getMetadata(presentation.metadata.Token)
@@ -532,7 +548,7 @@ export async function getInviteLinkId (
     return ''
   }
 
-  const inviteLink = await getAccountClient(token).createInviteLink(exp, emailMask, limit, role, personId)
+  const inviteLink = await getAccountClient(token).createInviteLink(exp, emailMask, limit, role)
 
   Analytics.handleEvent('Get invite link')
 
