@@ -16,22 +16,23 @@ import {
   CardEvents,
   cardId,
   DOMAIN_CARD,
-  type ParentInfo,
   type Card,
   type MasterTag,
+  type ParentInfo,
   type Tag
 } from '@hcengineering/card'
 import chunter from '@hcengineering/chunter'
-import contact from '@hcengineering/contact'
 import core, {
   AccountRole,
+  type Blobs,
   DOMAIN_MODEL,
   IndexKind,
   SortingOrder,
   type CollectionSize,
-  type MarkupBlobRef,
   type Rank,
-  type Ref
+  type Ref,
+  ClassifierKind,
+  type MarkupBlobRef
 } from '@hcengineering/core'
 import {
   Collection,
@@ -58,10 +59,15 @@ import card from './plugin'
 export { cardId } from '@hcengineering/card'
 
 @Model(card.class.MasterTag, core.class.Class)
-export class TMasterTag extends TClass implements MasterTag {}
+export class TMasterTag extends TClass implements MasterTag {
+  color?: number
+  removed?: boolean
+}
 
 @Model(card.class.Tag, core.class.Mixin)
-export class TTag extends TMixin implements Tag {}
+export class TTag extends TMixin implements Tag {
+  color?: number
+}
 
 @Model(card.class.Card, core.class.Doc, DOMAIN_CARD)
 @UX(card.string.Card, card.icon.Card)
@@ -75,6 +81,8 @@ export class TCard extends TDoc implements Card {
 
   @Prop(TypeCollaborativeDoc(), card.string.Content)
     content!: MarkupBlobRef
+
+  blobs!: Blobs
 
   @Prop(TypeRef(card.class.Card), card.string.Parent)
     parent?: Ref<Card> | null
@@ -103,6 +111,68 @@ export * from './migration'
 
 export function createModel (builder: Builder): void {
   builder.createModel(TMasterTag, TTag, TCard, MasterTagEditorSection)
+
+  builder.createDoc(
+    card.class.MasterTag,
+    core.space.Model,
+    {
+      label: attachment.string.File,
+      extends: card.class.Card,
+      icon: card.icon.File,
+      kind: ClassifierKind.CLASS
+    },
+    card.types.File
+  )
+
+  builder.mixin(card.types.File, card.class.MasterTag, setting.mixin.Editable, {
+    value: false
+  })
+
+  builder.createDoc(view.class.Viewlet, core.space.Model, {
+    attachTo: card.types.File,
+    descriptor: view.viewlet.Table,
+    configOptions: {
+      hiddenKeys: ['content', 'title']
+    },
+    config: [
+      '',
+      '_class',
+      { key: '', presenter: view.component.RolePresenter, label: card.string.Tags, props: { fullSize: true } },
+      'modifiedOn'
+    ]
+  })
+
+  builder.createDoc(view.class.Viewlet, core.space.Model, {
+    attachTo: card.types.File,
+    descriptor: view.viewlet.List,
+    viewOptions: {
+      groupBy: ['_class', 'createdBy', 'modifiedBy'],
+      orderBy: [
+        ['modifiedOn', SortingOrder.Descending],
+        ['rank', SortingOrder.Ascending]
+      ],
+      other: []
+    },
+    configOptions: {
+      hiddenKeys: ['content', 'title']
+    },
+    config: [
+      { key: '', props: { showParent: true } },
+      { key: '_class', displayProps: { fixed: 'left' } },
+      {
+        key: '',
+        presenter: view.component.RolePresenter,
+        label: card.string.Tags,
+        props: { fullSize: true },
+        displayProps: { fixed: 'left' }
+      },
+      { key: '', displayProps: { grow: true } },
+      {
+        key: 'modifiedOn',
+        displayProps: { fixed: 'right', dividerBefore: true }
+      }
+    ]
+  })
 
   builder.createDoc(
     workbench.class.Application,
@@ -368,8 +438,7 @@ export function createModel (builder: Builder): void {
       name: 'tagrelation',
       label: card.string.TagRelations,
       icon: setting.icon.Relations,
-      props: { _classes: [card.class.Card, contact.class.Contact], exclude: [] },
-      component: setting.component.RelationSetting,
+      component: card.component.RelationSetting,
       group: 'settings-editor',
       role: AccountRole.Maintainer,
       order: 4501
@@ -381,7 +450,7 @@ export function createModel (builder: Builder): void {
     setting.class.SettingsCategory,
     core.space.Model,
     {
-      name: 'masterTags',
+      name: 'types',
       label: card.string.MasterTags,
       icon: card.icon.Card,
       component: card.component.ManageMasterTagsContent,

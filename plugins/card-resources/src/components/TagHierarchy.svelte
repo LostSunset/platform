@@ -16,10 +16,11 @@
   import { MasterTag } from '@hcengineering/card'
   import { Class, Doc, Ref } from '@hcengineering/core'
   import { getClient } from '@hcengineering/presentation'
-  import { NavItem } from '@hcengineering/ui'
-  import { NavLink, showMenu } from '@hcengineering/view-resources'
+  import { IconWithEmoji, NavItem } from '@hcengineering/ui'
+  import { NavLink } from '@hcengineering/view-resources'
   import { createEventDispatcher } from 'svelte'
   import card from '../plugin'
+  import view from '@hcengineering/view'
 
   export let classes: MasterTag[] = []
   export let allClasses: MasterTag[] = []
@@ -59,16 +60,14 @@
     <NavItem
       _id={clazz._id}
       label={clazz.label}
-      icon={clazz.icon}
+      icon={clazz.icon === view.ids.IconWithEmoji ? IconWithEmoji : clazz.icon}
+      iconProps={clazz.icon === view.ids.IconWithEmoji ? { icon: clazz.color } : {}}
       isFold
       empty
       {level}
       selected={!deselect && clazz._id === _class}
       on:click={() => {
         dispatch('select', clazz._id)
-      }}
-      on:contextmenu={(evt) => {
-        showMenu(evt, { object: clazz })
       }}
     />
   </NavLink>
