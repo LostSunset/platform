@@ -26,8 +26,6 @@ import {
   type Class,
   type Data,
   type Doc,
-  type DocIndexState,
-  DOMAIN_DOC_INDEX_STATE,
   DOMAIN_SEQUENCE,
   DOMAIN_TX,
   generateId,
@@ -446,19 +444,11 @@ async function migrateDocumentMetaInternalCode (client: MigrationClient): Promis
   }
 
   await client.bulk(DOMAIN_DOCUMENTS, operations)
-  await client.update<DocIndexState>(
-    DOMAIN_DOC_INDEX_STATE,
-    {
-      _id: { $in: Array.from(updatedIds) as any },
-      objectClass: documents.class.DocumentMeta
-    },
-    { $set: { needIndex: true } }
-  )
 }
 
 export const documentsOperation: MigrateOperation = {
-  async migrate (client: MigrationClient): Promise<void> {
-    await tryMigrate(client, documentsId, [
+  async migrate (client: MigrationClient, mode): Promise<void> {
+    await tryMigrate(mode, client, documentsId, [
       {
         state: 'migrateSpaceTypes',
         func: migrateSpaceTypes
@@ -488,8 +478,8 @@ export const documentsOperation: MigrateOperation = {
       }
     ])
   },
-  async upgrade (state: Map<string, Set<string>>, client: () => Promise<MigrationUpgradeClient>): Promise<void> {
-    await tryUpgrade(state, client, documentsId, [
+  async upgrade (state: Map<string, Set<string>>, client: () => Promise<MigrationUpgradeClient>, mode): Promise<void> {
+    await tryUpgrade(mode, state, client, documentsId, [
       {
         state: 'init-documents',
         func: async (client) => {

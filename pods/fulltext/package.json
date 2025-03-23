@@ -64,7 +64,7 @@
     "@hcengineering/backup-service": "^0.6.0",
     "@hcengineering/analytics": "^0.6.0",
     "@hcengineering/analytics-service": "^0.6.0",
-    "koa": "^2.15.3",
+    "koa": "^2.15.4",
     "koa-router": "^12.0.1",
     "koa-bodyparser": "^4.4.1",
     "@koa/cors": "^5.0.0",
@@ -75,6 +75,7 @@
     "@hcengineering/server-client": "^0.6.0",
     "@hcengineering/server-storage": "^0.6.0",
     "@hcengineering/postgres": "^0.6.0",
-    "@hcengineering/mongo": "^0.6.1"
+    "@hcengineering/mongo": "^0.6.1",
+    "@hcengineering/kafka": "^0.6.0"
   }
 }

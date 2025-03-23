@@ -122,7 +122,7 @@ export async function handleBlobHead (
   res.setHeader('Last-Modified', new Date(head.lastModified).toUTCString())
   res.setHeader('ETag', head.etag)
 
-  res.status(204).send()
+  res.status(200).send()
 }
 
 export async function handleBlobDelete (
@@ -135,6 +135,8 @@ export async function handleBlobDelete (
 
   try {
     await datalake.delete(ctx, workspace, name)
+    ctx.info('deleted', { workspace, name })
+
     res.status(204).send()
   } catch (error: any) {
     ctx.error('failed to delete blob', { error })
@@ -153,6 +155,8 @@ export async function handleBlobDeleteList (
 
   try {
     await datalake.delete(ctx, workspace, body.names)
+    ctx.info('deleted', { workspace, names: body.names })
+
     res.status(204).send()
   } catch (error: any) {
     ctx.error('failed to delete blobs', { error })
@@ -222,6 +226,8 @@ export async function handleUploadFormData (
           contentType,
           lastModified: Date.now()
         })
+
+        ctx.info('uploaded', { workspace, name, etag: metadata.etag, type: contentType })
 
         return { key, metadata }
       } catch (err: any) {

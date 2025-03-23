@@ -26,10 +26,10 @@ import core, {
   groupByArray,
   isOperator,
   matchQuery,
+  platformNow,
   toFindResult,
   withContext,
   type AssociationQuery,
-  type WorkspaceIds,
   type Class,
   type Doc,
   type DocInfo,
@@ -62,16 +62,17 @@ import core, {
   type TxResult,
   type TxUpdateDoc,
   type WithLookup,
-  platformNow
+  type WorkspaceIds
 } from '@hcengineering/core'
 import {
+  calcHashHash,
   type DbAdapter,
   type DbAdapterHandler,
   type DomainHelperOperations,
+  type RawFindIterator,
   type ServerFindOptions,
   type StorageAdapter,
-  type TxAdapter,
-  calcHashHash
+  type TxAdapter
 } from '@hcengineering/server-core'
 import {
   type AbstractCursor,
@@ -1145,6 +1146,33 @@ abstract class MongoAdapterBase implements DbAdapter {
     }
   }
 
+  rawFind (_ctx: MeasureContext, domain: Domain): RawFindIterator {
+    const ctx = _ctx.newChild('findRaw', { domain })
+    const coll = this.db.collection<Doc>(domain)
+    let iterator: FindCursor<Doc>
+
+    return {
+      find: async () => {
+        if (iterator === undefined) {
+          iterator = coll.find({})
+        }
+        const d = await ctx.with('next', {}, () => iterator.next())
+        const result: Doc[] = []
+        if (d != null) {
+          result.push(this.stripHash(d) as Doc)
+        }
+        if (iterator.bufferedCount() > 0) {
+          result.push(...(this.stripHash(iterator.readBufferedDocuments()) as Doc[]))
+        }
+        return result ?? []
+      },
+      close: async () => {
+        await ctx.with('close', {}, () => iterator.close())
+        ctx.end()
+      }
+    }
+  }
+
   load (ctx: MeasureContext, domain: Domain, docs: Ref<Doc>[]): Promise<Doc[]> {
     return ctx.with('load', { domain }, async () => {
       if (docs.length === 0) {
@@ -1619,7 +1647,7 @@ class MongoTxAdapter extends MongoAdapterBase implements TxAdapter {
   @withContext('get-model')
   async getModel (ctx: MeasureContext): Promise<Tx[]> {
     const txCollection = this.db.collection<Tx>(DOMAIN_MODEL_TX)
-    const cursor = txCollection.find({}, { sort: { _id: 1, modifiedOn: 1 } })
+    const cursor = txCollection.find({}, { sort: { modifiedOn: 1, _id: 1 } })
     const model = await toArray<Tx>(cursor)
     // We need to put all core.account.System transactions first
     const systemTx: Tx[] = []

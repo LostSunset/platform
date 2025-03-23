@@ -66,6 +66,7 @@ import {
   type DbAdapter,
   type DbAdapterHandler,
   type DomainHelperOperations,
+  type RawFindIterator,
   type ServerFindOptions,
   type TxAdapter
 } from '@hcengineering/server-core'
@@ -727,7 +728,7 @@ abstract class PostgresAdapterBase implements DbAdapter {
           })) as FindResult<T>
         } catch (err) {
           const sqlFull = vars.injectVars(fquery)
-          ctx.error('Error in findAll', { err, sql: fquery, sqlFull })
+          ctx.error('Error in findAll', { err, sql: fquery, sqlFull, query })
           throw err
         }
       },
@@ -1317,6 +1318,7 @@ abstract class PostgresAdapterBase implements DbAdapter {
     } else if (typeof value === 'object' && !Array.isArray(value)) {
       // we can have multiple criteria for one field
       const res: string[] = []
+      const nonOperator: Record<string, any> = {}
       for (const operator in value) {
         let val = value[operator]
         if (tkeyData && (Array.isArray(val) || (typeof val !== 'object' && typeof val !== 'string'))) {
@@ -1403,9 +1405,13 @@ abstract class PostgresAdapterBase implements DbAdapter {
             }
             break
           default:
-            res.push(`${tkey} @> '[${JSON.stringify(value)}]'`)
+            nonOperator[operator] = value[operator]
             break
         }
+      }
+      if (Object.keys(nonOperator).length > 0) {
+        const qkey = tkey.replace('#>>', '->').replace('{', '').replace('}', '')
+        res.push(`(${qkey} @> '${JSON.stringify(nonOperator)}' or ${qkey} @> '[${JSON.stringify(nonOperator)}]')`)
       }
       return res.length === 0 ? undefined : res.join(' AND ')
     }
@@ -1610,6 +1616,54 @@ abstract class PostgresAdapterBase implements DbAdapter {
     }
   }
 
+  rawFind (_ctx: MeasureContext, domain: Domain): RawFindIterator {
+    const ctx = _ctx.newChild('findRaw', { domain })
+
+    let initialized: boolean = false
+    let client: DBClient
+
+    const tdomain = translateDomain(domain)
+    const schema = getSchema(domain)
+
+    const workspaceId = this.workspaceId
+
+    function createBulk (projection: string, limit = 1000): AsyncGenerator<Doc[]> {
+      const sql = `
+        SELECT ${projection}
+        FROM ${tdomain}
+        WHERE "workspaceId" = '${workspaceId}'
+      `
+
+      return createCursorGenerator(client.raw(), sql, undefined, schema, limit)
+    }
+    let bulk: AsyncGenerator<Doc[]>
+
+    return {
+      find: async () => {
+        if (!initialized) {
+          if (client === undefined) {
+            client = await this.client.reserve()
+          }
+          initialized = true
+          bulk = createBulk('*')
+        }
+
+        const docs = await ctx.with('next', {}, () => bulk.next())
+        if (docs.done === true || docs.value.length === 0) {
+          return []
+        }
+        const result: Doc[] = []
+        result.push(...(this.stripHash(docs.value) as Doc[]))
+        return result
+      },
+      close: async () => {
+        await bulk.return([]) // We need to close generator, just in case
+        client?.release()
+        ctx.end()
+      }
+    }
+  }
+
   load (ctx: MeasureContext, domain: Domain, docs: Ref<Doc>[]): Promise<Doc[]> {
     return ctx.with('load', { domain }, async () => {
       if (docs.length === 0) {
@@ -1756,26 +1810,49 @@ export class PostgresAdapter extends PostgresAdapterBase {
     this._helper.domains = new Set(resultDomains as Domain[])
   }
 
-  private process (ops: OperationBulk, tx: Tx): void {
-    switch (tx._class) {
-      case core.class.TxCreateDoc:
-        ops.add.push(TxProcessor.createDoc2Doc(tx as TxCreateDoc<Doc>))
-        break
-      case core.class.TxUpdateDoc:
-        ops.updates.push(tx as TxUpdateDoc<Doc>)
-        break
-      case core.class.TxRemoveDoc:
-        ops.removes.push(tx as TxRemoveDoc<Doc>)
-        break
-      case core.class.TxMixin:
-        ops.mixins.push(tx as TxMixin<Doc, Doc>)
-        break
-      case core.class.TxApplyIf:
-        return undefined
-      default:
-        console.error('Unknown/Unsupported operation:', tx._class, tx)
-        break
+  private process (txes: Tx[]): OperationBulk {
+    const ops: OperationBulk = {
+      add: [],
+      mixins: [],
+      removes: [],
+      updates: []
     }
+    const updateGroup = new Map<Ref<Doc>, TxUpdateDoc<Doc>>()
+    for (const tx of txes) {
+      switch (tx._class) {
+        case core.class.TxCreateDoc:
+          ops.add.push(TxProcessor.createDoc2Doc(tx as TxCreateDoc<Doc>))
+          break
+        case core.class.TxUpdateDoc: {
+          const updateTx = tx as TxUpdateDoc<Doc>
+          if (isOperator(updateTx.operations)) {
+            ops.updates.push(updateTx)
+          } else {
+            const current = updateGroup.get(updateTx.objectId)
+            if (current !== undefined) {
+              current.operations = { ...current.operations, ...updateTx.operations }
+              updateGroup.set(updateTx.objectId, current)
+            } else {
+              updateGroup.set(updateTx.objectId, updateTx)
+            }
+          }
+          break
+        }
+        case core.class.TxRemoveDoc:
+          ops.removes.push(tx as TxRemoveDoc<Doc>)
+          break
+        case core.class.TxMixin:
+          ops.mixins.push(tx as TxMixin<Doc, Doc>)
+          break
+        case core.class.TxApplyIf:
+          break
+        default:
+          console.error('Unknown/Unsupported operation:', tx._class, tx)
+          break
+      }
+    }
+    ops.updates.push(...updateGroup.values())
+    return ops
   }
 
   private async txMixin (ctx: MeasureContext, tx: TxMixin<Doc, Doc>, schemaFields: SchemaAndFields): Promise<TxResult> {
@@ -1824,15 +1901,8 @@ export class PostgresAdapter extends PostgresAdapterBase {
       if (domain === undefined) {
         continue
       }
-      const ops: OperationBulk = {
-        add: [],
-        mixins: [],
-        removes: [],
-        updates: []
-      }
-      for (const tx of txs) {
-        this.process(ops, tx)
-      }
+
+      const ops = this.process(txs)
 
       const domainFields = getSchemaAndFields(domain)
       if (ops.add.length > 0) {
@@ -2093,7 +2163,7 @@ class PostgresTxAdapter extends PostgresAdapterBase implements TxAdapter {
         SELECT * 
         FROM "${translateDomain(DOMAIN_MODEL_TX)}" 
         WHERE "workspaceId" = $1::uuid 
-        ORDER BY _id::text ASC, "modifiedOn"::bigint ASC
+        ORDER BY "modifiedOn"::bigint ASC, _id::text ASC
       `
       return client.execute(query, [this.workspaceId])
     })

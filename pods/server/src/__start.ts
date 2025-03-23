@@ -4,22 +4,24 @@
 
 // Add this to the VERY top of the first file loaded in your app
 import { Analytics } from '@hcengineering/analytics'
-import { SplitLogger, configureAnalytics } from '@hcengineering/analytics-service'
+import { configureAnalytics, SplitLogger } from '@hcengineering/analytics-service'
 import contactPlugin from '@hcengineering/contact'
 import { MeasureMetricsContext, newMetrics, setOperationLogProfiling } from '@hcengineering/core'
+import { getPlatformQueue } from '@hcengineering/kafka'
 import { setMetadata } from '@hcengineering/platform'
+import { setDBExtraOptions } from '@hcengineering/postgres'
 import { serverConfigFromEnv } from '@hcengineering/server'
 import serverAiBot from '@hcengineering/server-ai-bot'
 import serverCalendar from '@hcengineering/server-calendar'
 import serverCore, {
+  initStatisticsContext,
+  loadBrandingMap,
   type ConnectionSocket,
   type Session,
   type StorageConfiguration,
   type UserStatistics,
   type Workspace,
-  type WorkspaceStatistics,
-  initStatisticsContext,
-  loadBrandingMap
+  type WorkspaceStatistics
 } from '@hcengineering/server-core'
 import serverNotification from '@hcengineering/server-notification'
 import { storageConfigFromEnv } from '@hcengineering/server-storage'
@@ -29,7 +31,6 @@ import { startHttpServer } from '@hcengineering/server-ws'
 import { join } from 'path'
 import { start } from '.'
 import { profileStart, profileStop } from './inspector'
-import { setDBExtraOptions } from '@hcengineering/postgres'
 
 configureAnalytics(process.env.SENTRY_DSN, {})
 Analytics.setTag('application', 'transactor')
@@ -37,6 +38,18 @@ Analytics.setTag('application', 'transactor')
 let getUsers: () => WorkspaceStatistics[] = () => {
   return []
 }
+
+const queueConfig = process.env.QUEUE_CONFIG
+if (queueConfig === undefined) {
+  throw new Error('Please provide queue config')
+}
+
+const queue = getPlatformQueue('transactor')
+
+void queue.createTopics(10).catch((err) => {
+  console.error('Failed to create required topics', err)
+})
+
 // Force create server metrics context with proper logging
 const metricsContext = initStatisticsContext('transactor', {
   getUsers: (): WorkspaceStatistics[] => {
@@ -71,9 +84,9 @@ setMetadata(contactPlugin.metadata.LastNameFirst, lastNameFirst)
 setMetadata(serverCore.metadata.FrontUrl, config.frontUrl)
 setMetadata(serverCore.metadata.FilesUrl, config.filesUrl)
 setMetadata(serverToken.metadata.Secret, config.serverSecret)
-setMetadata(serverNotification.metadata.SesUrl, config.sesUrl ?? '')
-setMetadata(serverNotification.metadata.SesAuthToken, config.sesAuthToken)
-setMetadata(serverNotification.metadata.WebPushUrl, config.webPushUrl ?? config.sesUrl)
+setMetadata(serverNotification.metadata.MailUrl, config.mailUrl ?? '')
+setMetadata(serverNotification.metadata.MailAuthToken, config.mailAuthToken)
+setMetadata(serverNotification.metadata.WebPushUrl, config.webPushUrl)
 setMetadata(serverTelegram.metadata.BotUrl, process.env.TELEGRAM_BOT_URL)
 setMetadata(serverAiBot.metadata.EndpointURL, process.env.AI_BOT_URL)
 setMetadata(serverCalendar.metadata.EndpointURL, process.env.CALENDAR_URL)
@@ -90,7 +103,8 @@ const { shutdown, sessionManager } = start(metricsContext, config.dbUrl, {
     start: profileStart,
     stop: profileStop
   },
-  mongoUrl: config.mongoUrl
+  mongoUrl: config.mongoUrl,
+  queue
 })
 
 const entryToUserStats = (session: Session, socket: ConnectionSocket): UserStatistics => {
