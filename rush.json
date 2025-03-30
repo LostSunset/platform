@@ -1909,6 +1909,26 @@
       "shouldPublish": false
     },
     {
+      "packageName": "@hcengineering/model-export",
+      "projectFolder": "models/export",
+      "shouldPublish": false
+    },
+    {
+      "packageName": "@hcengineering/export",
+      "projectFolder": "plugins/export",
+      "shouldPublish": false
+    },
+    {
+      "packageName": "@hcengineering/export-assets",
+      "projectFolder": "plugins/export-assets",
+      "shouldPublish": false
+    },
+    {
+      "packageName": "@hcengineering/export-resources",
+      "projectFolder": "plugins/export-resources",
+      "shouldPublish": false
+    },
+    {
       "packageName": "@hcengineering/sign",
       "projectFolder": "plugins/sign",
       "shouldPublish": false
@@ -2344,11 +2364,6 @@
       "shouldPublish": false
     },
     {
-      "packageName": "@hcengineering/pod-hook",
-      "projectFolder": "services/hook/pod-hook",
-      "shouldPublish": false
-    },
-    {
       "packageName": "@hcengineering/process",
       "projectFolder": "plugins/process",
       "shouldPublish": false
@@ -2386,6 +2401,11 @@
     {
       "packageName": "@hcengineering/kafka",
       "projectFolder": "server/kafka",
+      "shouldPublish": false
+    },
+    {
+      "packageName": "@hcengineering/pod-inbound-mail",
+      "projectFolder": "services/mail/pod-inbound-mail",
       "shouldPublish": false
     }
   ]

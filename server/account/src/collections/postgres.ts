@@ -39,7 +39,9 @@ import type {
   WorkspaceStatus,
   WorkspaceStatusData,
   WorkspaceInfoWithStatus,
-  Sort
+  Sort,
+  Mailbox,
+  MailboxSecret
 } from '../types'
 
 function toSnakeCase (str: string): string {
@@ -376,6 +378,8 @@ export class PostgresAccountDB implements AccountDB {
   accountEvent: PostgresDbCollection<AccountEvent>
   otp: PostgresDbCollection<OTP>
   invite: PostgresDbCollection<WorkspaceInvite, 'id'>
+  mailbox: PostgresDbCollection<Mailbox, 'mailbox'>
+  mailboxSecret: PostgresDbCollection<MailboxSecret>
 
   constructor (
     readonly client: Sql,
@@ -389,6 +393,8 @@ export class PostgresAccountDB implements AccountDB {
     this.accountEvent = new PostgresDbCollection<AccountEvent>('account_events', client)
     this.otp = new PostgresDbCollection<OTP>('otp', client)
     this.invite = new PostgresDbCollection<WorkspaceInvite, 'id'>('invite', client, 'id')
+    this.mailbox = new PostgresDbCollection<Mailbox, 'mailbox'>('mailbox', client)
+    this.mailboxSecret = new PostgresDbCollection<MailboxSecret>('mailbox_secrets', client)
   }
 
   getWsMembersTableName (): string {
@@ -631,7 +637,14 @@ export class PostgresAccountDB implements AccountDB {
   }
 
   protected getMigrations (): [string, string][] {
-    return [this.getV1Migration(), this.getV2Migration1(), this.getV2Migration2(), this.getV2Migration3()]
+    return [
+      this.getV1Migration(),
+      this.getV2Migration1(),
+      this.getV2Migration2(),
+      this.getV2Migration3(),
+      this.getV3Migration(),
+      this.getV4Migration()
+    ]
   }
 
   // NOTE: NEVER MODIFY EXISTING MIGRATIONS. IF YOU NEED TO ADJUST THE SCHEMA, ADD A NEW MIGRATION.
@@ -826,6 +839,41 @@ export class PostgresAccountDB implements AccountDB {
           created_on BIGINT NOT NULL DEFAULT current_epoch_ms(),
           CONSTRAINT otp_new_pk PRIMARY KEY (social_id, code),
           CONSTRAINT otp_new_social_id_fk FOREIGN KEY (social_id) REFERENCES ${this.ns}.social_id(_id)
+      );
+      `
+    ]
+  }
+
+  private getV3Migration (): [string, string] {
+    return [
+      'account_db_v3_add_invite_auto_join_final',
+      `
+      ALTER TABLE ${this.ns}.invite
+      ADD COLUMN IF NOT EXISTS email STRING,
+      ADD COLUMN IF NOT EXISTS auto_join BOOL DEFAULT FALSE;
+
+      ALTER TABLE ${this.ns}.account
+      ADD COLUMN IF NOT EXISTS automatic BOOL;
+      `
+    ]
+  }
+
+  private getV4Migration (): [string, string] {
+    return [
+      'account_db_v4_mailbox',
+      `
+      CREATE TABLE IF NOT EXISTS ${this.ns}.mailbox (
+          account_uuid UUID NOT NULL,
+          mailbox STRING NOT NULL,
+          CONSTRAINT mailbox_pk PRIMARY KEY (mailbox),
+          CONSTRAINT mailbox_account_fk FOREIGN KEY (account_uuid) REFERENCES ${this.ns}.account(uuid)
+      );
+
+      CREATE TABLE IF NOT EXISTS ${this.ns}.mailbox_secrets (
+          mailbox STRING NOT NULL,
+          app STRING,
+          secret STRING NOT NULL,
+          CONSTRAINT mailbox_secret_mailbox_fk FOREIGN KEY (mailbox) REFERENCES ${this.ns}.mailbox(mailbox)
       );
       `
     ]

@@ -339,7 +339,8 @@ export class TSessionManager implements SessionManager {
           uuid: loginInfo.account,
           role: loginInfo.role,
           primarySocialId: '' as PersonId,
-          socialIds: []
+          socialIds: [],
+          fullSocialIds: []
         }
       }
 
@@ -348,7 +349,8 @@ export class TSessionManager implements SessionManager {
           uuid: loginInfo.account,
           role: loginInfo.role,
           primarySocialId: core.account.System,
-          socialIds: []
+          socialIds: [core.account.System],
+          fullSocialIds: []
         }
       }
 
@@ -358,7 +360,8 @@ export class TSessionManager implements SessionManager {
         uuid: loginInfo.account,
         role: loginInfo.role,
         primarySocialId: pickPrimarySocialId(socialIds)._id,
-        socialIds: socialIds.map((si) => si._id)
+        socialIds: socialIds.map((si) => si._id),
+        fullSocialIds: socialIds
       }
     } catch (err: any) {
       if (err?.cause?.code === 'ECONNRESET' || err?.cause?.code === 'ECONNREFUSED') {
@@ -798,7 +801,7 @@ export class TSessionManager implements SessionManager {
           // No response
         },
         ctx,
-        socialStringsToUsers: this.getActiveSocialStringsToUsersMap(workspaceId),
+        socialStringsToUsers: this.getActiveSocialStringsToUsersMap(workspaceId, session),
         sendError: async () => {
           // Assume no error send
         },
@@ -983,6 +986,8 @@ export class TSessionManager implements SessionManager {
     for (const w of this.workspaces) {
       await this.closeAll(w[0], w[1], 1, 'shutdown')
     }
+    await this.workspaceProducer.close()
+    await this.usersProducer.close()
   }
 
   private async performWorkspaceCloseCheck (workspace: Workspace, wsUuid: WorkspaceUuid): Promise<void> {
@@ -1067,19 +1072,19 @@ export class TSessionManager implements SessionManager {
   }
 
   // TODO: cache this map and update when sessions created/closed
-  getActiveSocialStringsToUsersMap (workspace: WorkspaceUuid): Map<PersonId, AccountUuid> {
+  getActiveSocialStringsToUsersMap (workspace: WorkspaceUuid, ...extra: Session[]): Map<PersonId, AccountUuid> {
     const ws = this.workspaces.get(workspace)
     if (ws === undefined) {
       return new Map()
     }
 
     const res = new Map<PersonId, AccountUuid>()
-    for (const s of ws.sessions.values()) {
-      const sessionAccount = s.session.getUser()
+    for (const s of [...Array.from(ws.sessions.values()).map((it) => it.session), ...extra]) {
+      const sessionAccount = s.getUser()
       if (sessionAccount === systemAccountUuid) {
         continue
       }
-      const userSocialIds = s.session.getUserSocialIds()
+      const userSocialIds = s.getUserSocialIds()
       for (const id of userSocialIds) {
         res.set(id, sessionAccount)
       }
@@ -1353,7 +1358,7 @@ export function startSessionManager (
     opt.brandingMap,
     {
       pingTimeout: opt.pingTimeout ?? 10000,
-      reconnectTimeout: 500
+      reconnectTimeout: 5 // seconds to reconnect
     },
     opt.profiling,
     opt.accountsUrl,
