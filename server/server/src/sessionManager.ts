@@ -66,12 +66,15 @@ import {
   type PlatformQueueProducer,
   type QueueWorkspaceMessage,
   type Session,
-  type SessionFactory,
-  type Workspace
+  type Workspace,
+  CommunicationApiFactory,
+  type SessionFactory
 } from '@hcengineering/server-core'
 import { generateToken, type Token } from '@hcengineering/server-token'
+import { type ServerApi as CommunicationApi } from '@hcengineering/communication-sdk-types'
 
 import { sendResponse } from './utils'
+import { WorkspaceIds } from '@hcengineering/core'
 
 const ticksPerSecond = 20
 const workspaceSoftShutdownTicks = 15 * ticksPerSecond
@@ -386,6 +389,7 @@ export class TSessionManager implements SessionManager {
     token: Token,
     rawToken: string,
     pipelineFactory: PipelineFactory,
+    communicationApiFactory: CommunicationApiFactory,
     sessionId: string | undefined
   ): Promise<AddSessionResponse> {
     const { workspace: workspaceUuid } = token
@@ -492,6 +496,7 @@ export class TSessionManager implements SessionManager {
         ctx.parent ?? ctx,
         ctx,
         pipelineFactory,
+        communicationApiFactory,
         token,
         workspaceInfo.url ?? workspaceInfo.uuid,
         workspaceName,
@@ -526,6 +531,7 @@ export class TSessionManager implements SessionManager {
           workspaceInfo.uuid,
           workspace,
           pipelineFactory,
+          communicationApiFactory,
           ws,
           workspaceInfo.url ?? workspaceInfo.uuid,
           workspaceName
@@ -605,6 +611,7 @@ export class TSessionManager implements SessionManager {
     workspaceUuid: WorkspaceUuid,
     workspace: Workspace,
     pipelineFactory: PipelineFactory,
+    communicationApiFactory: CommunicationApiFactory,
     ws: ConnectionSocket,
     workspaceUrl: string,
     workspaceName: string
@@ -627,19 +634,25 @@ export class TSessionManager implements SessionManager {
       workspace.id = generateId()
       workspace.sessions = new Map()
     }
+
+    const workspaceIds: WorkspaceIds = {
+      uuid: workspace.workspaceUuid,
+      url: workspace.workspaceUrl,
+      dataId: workspace.workspaceDataId
+    }
+    workspace.communicationApi = await communicationApiFactory(ctx, workspaceIds, (ctx, sessionIds, result) => {
+      this.broadcastSessions(ctx, workspace, sessionIds, result)
+    })
     // Re-create pipeline.
     workspace.pipeline = pipelineFactory(
       ctx,
-      {
-        uuid: workspace.workspaceUuid,
-        url: workspace.workspaceUrl,
-        dataId: workspace.workspaceDataId
-      },
+      workspaceIds,
       true,
       (ctx, tx, targets, exclude) => {
         this.broadcastAll(workspace, tx, targets, exclude)
       },
-      workspace.branding
+      workspace.branding,
+      workspace.communicationApi
     )
     return await workspace.pipeline
   }
@@ -665,6 +678,37 @@ export class TSessionManager implements SessionManager {
           void sendResponse(ctx, session.session, session.socket, { result: tx }).catch((err) => {
             ctx.error('failed to send', err)
           })
+        } catch (err: any) {
+          Analytics.handleError(err)
+          ctx.error('error during send', { error: err })
+        }
+      }
+      ctx.end()
+    }
+    if (sessions.length > 0) {
+      // We need to send broadcast after our client response so put it after all IO
+      send()
+    } else {
+      ctx.end()
+    }
+  }
+
+  broadcastSessions (measure: MeasureContext, workspace: Workspace, sessionIds: string[], result: any): void {
+    if (workspace.upgrade) {
+      return
+    }
+    const ctx = measure.newChild('📬 broadcast sessions', {})
+    const sessions = [...workspace.sessions.values()].filter((it) => {
+      if (it === undefined || it.session.sessionId === '') {
+        return false
+      }
+      return sessionIds.includes(it.session.sessionId)
+    })
+
+    function send (): void {
+      for (const session of sessions) {
+        try {
+          void sendResponse(ctx, session.session, session.socket, { result })
         } catch (err: any) {
           Analytics.handleError(err)
           ctx.error('error during send', { error: err })
@@ -723,6 +767,7 @@ export class TSessionManager implements SessionManager {
     ctx: MeasureContext,
     pipelineCtx: MeasureContext,
     pipelineFactory: PipelineFactory,
+    communicationApiFactory: CommunicationApiFactory,
     token: Token,
     workspaceUrl: string,
     workspaceName: string,
@@ -732,22 +777,32 @@ export class TSessionManager implements SessionManager {
   ): Workspace {
     const upgrade = token.extra?.model === 'upgrade'
     const context = ctx.newChild('🧲 session', {})
-    const workspace: Workspace = {
-      context,
-      id: generateId(),
-      pipeline: pipelineFactory(
+    const workspaceIds: WorkspaceIds = {
+      uuid: token.workspace,
+      dataId: workspaceDataId,
+      url: workspaceUrl
+    }
+    const communicationApi = communicationApiFactory(pipelineCtx, workspaceIds, (ctx, sessionIds, result) => {
+      this.broadcastSessions(ctx, workspace, sessionIds, result)
+    })
+
+    const factory = async (): Promise<Pipeline> => {
+      return await pipelineFactory(
         pipelineCtx,
-        {
-          uuid: token.workspace,
-          dataId: workspaceDataId,
-          url: workspaceUrl
-        },
+        workspaceIds,
         upgrade,
         (ctx, tx, targets, exclude) => {
           this.broadcastAll(workspace, tx, targets, exclude)
         },
-        branding
-      ),
+        branding,
+        await communicationApi
+      )
+    }
+    const workspace: Workspace = {
+      context,
+      id: generateId(),
+      pipeline: factory(),
+      communicationApi,
       sessions: new Map(),
       softShutdown: workspaceSoftShutdownTicks,
       upgrade,
@@ -769,6 +824,7 @@ export class TSessionManager implements SessionManager {
   private async trySetStatus (
     ctx: MeasureContext,
     pipeline: Pipeline,
+    communicationApi: CommunicationApi,
     session: Session,
     online: boolean,
     workspaceId: WorkspaceUuid
@@ -777,7 +833,7 @@ export class TSessionManager implements SessionManager {
     if (current !== undefined) {
       await current
     }
-    const promise = this.setStatus(ctx, pipeline, session, online, workspaceId)
+    const promise = this.setStatus(ctx, pipeline, communicationApi, session, online, workspaceId)
     this.statusPromises.set(session.getUser(), promise)
     await promise
     this.statusPromises.delete(session.getUser())
@@ -786,6 +842,7 @@ export class TSessionManager implements SessionManager {
   private async setStatus (
     ctx: MeasureContext,
     pipeline: Pipeline,
+    communicationApi: CommunicationApi,
     session: Session,
     online: boolean,
     workspaceId: WorkspaceUuid
@@ -797,6 +854,7 @@ export class TSessionManager implements SessionManager {
       const clientCtx: ClientSessionCtx = {
         requestId: undefined,
         pipeline,
+        communicationApi,
         sendResponse: async () => {
           // No response
         },
@@ -857,13 +915,14 @@ export class TSessionManager implements SessionManager {
         ])
 
         const pipeline = workspace.pipeline instanceof Promise ? await workspace.pipeline : workspace.pipeline
+        const communicationApi =
+          workspace.communicationApi instanceof Promise ? await workspace.communicationApi : workspace.communicationApi
 
         if (this.doHandleTick) {
           workspace.tickHandlers.set(sessionRef.session.sessionId, {
             ticks: this.timeouts.reconnectTimeout * ticksPerSecond,
             operation: () => {
               this.reconnectIds.delete(sessionRef.session.sessionId)
-
               const user = sessionRef.session.getUser()
               if (workspace !== undefined) {
                 const another = Array.from(workspace.sessions.values()).findIndex((p) => p.session.getUser() === user)
@@ -871,6 +930,7 @@ export class TSessionManager implements SessionManager {
                   void this.trySetStatus(
                     workspace.context,
                     pipeline,
+                    communicationApi,
                     sessionRef.session,
                     false,
                     workspace.workspaceUuid
@@ -948,21 +1008,7 @@ export class TSessionManager implements SessionManager {
         closeS(s[1].session, s[1].socket)
       })
 
-    const closePipeline = async (): Promise<void> => {
-      try {
-        await this.ctx.with('close-pipeline', {}, async () => {
-          await (await workspace.pipeline).close()
-        })
-      } catch (err: any) {
-        Analytics.handleError(err)
-        this.ctx.error('close-pipeline-error', { error: err })
-      }
-    }
-    await this.ctx.with('closing', {}, async () => {
-      const to = timeoutPromise(120000)
-      await Promise.race([closePipeline(), to.promise])
-      to.cancelHandle()
-    })
+    await closeWorkspace(this.ctx, workspace)
     if (LOGGING_ENABLED) {
       this.ctx.warn('Workspace closed...', { workspace: workspace.id, wsId, wsName: workspace.workspaceName })
     }
@@ -999,13 +1045,7 @@ export class TSessionManager implements SessionManager {
       }
       try {
         if (workspace.sessions.size === 0) {
-          const pl = await workspace.pipeline
-          let to = timeoutPromise(60000)
-          await Promise.race([pl, to.promise])
-          to.cancelHandle()
-          to = timeoutPromise(60000)
-          await Promise.race([pl.close(), to])
-          to.cancelHandle()
+          await closeWorkspace(this.ctx, workspace)
 
           if (this.workspaces.get(wsUuid)?.id === wsUID) {
             this.workspaces.delete(wsUuid)
@@ -1038,6 +1078,7 @@ export class TSessionManager implements SessionManager {
     ctx: MeasureContext,
     sendCtx: MeasureContext,
     pipeline: Pipeline,
+    communicationApi: CommunicationApi,
     requestId: Request<any>['id'],
     service: Session,
     ws: ConnectionSocket
@@ -1046,6 +1087,7 @@ export class TSessionManager implements SessionManager {
     return {
       ctx,
       pipeline,
+      communicationApi,
       requestId,
       sendResponse: (reqId, msg) =>
         sendResponse(sendCtx, service, ws, {
@@ -1157,6 +1199,10 @@ export class TSessionManager implements SessionManager {
 
         const pipeline =
           service.workspace.pipeline instanceof Promise ? await service.workspace.pipeline : service.workspace.pipeline
+        const communicationApi =
+          service.workspace.communicationApi instanceof Promise
+            ? await service.workspace.communicationApi
+            : service.workspace.communicationApi
 
         const f = (service as any)[request.method]
         try {
@@ -1167,7 +1213,10 @@ export class TSessionManager implements SessionManager {
           }
 
           await ctx.with('🧨 process', {}, (callTx) =>
-            f.apply(service, [this.createOpContext(callTx, userCtx, pipeline, request.id, service, ws), ...params])
+            f.apply(service, [
+              this.createOpContext(callTx, userCtx, pipeline, communicationApi, request.id, service, ws),
+              ...params
+            ])
           )
         } catch (err: any) {
           Analytics.handleError(err)
@@ -1218,9 +1267,12 @@ export class TSessionManager implements SessionManager {
 
         const pipeline =
           service.workspace.pipeline instanceof Promise ? await service.workspace.pipeline : service.workspace.pipeline
-
+        const communicationApi =
+          service.workspace.communicationApi instanceof Promise
+            ? await service.workspace.communicationApi
+            : service.workspace.communicationApi
         try {
-          const uctx = this.createOpContext(ctx, userCtx, pipeline, reqId, service, ws)
+          const uctx = this.createOpContext(ctx, userCtx, pipeline, communicationApi, reqId, service, ws)
           await operation(uctx)
         } catch (err: any) {
           Analytics.handleError(err)
@@ -1276,6 +1328,10 @@ export class TSessionManager implements SessionManager {
       }
       const pipeline =
         service.workspace.pipeline instanceof Promise ? await service.workspace.pipeline : service.workspace.pipeline
+      const communicationApi =
+        service.workspace.communicationApi instanceof Promise
+          ? await service.workspace.communicationApi
+          : service.workspace.communicationApi
       const helloResponse: HelloResponse = {
         id: -1,
         result: 'hello',
@@ -1293,7 +1349,9 @@ export class TSessionManager implements SessionManager {
       const _workspace = service.workspace
       if (helloResponse.account.role !== AccountRole.DocGuest) {
         void ctx
-          .with('set-status', {}, (ctx) => this.trySetStatus(ctx, pipeline, service, true, _workspace.workspaceUuid))
+          .with('set-status', {}, (ctx) =>
+            this.trySetStatus(ctx, pipeline, communicationApi, service, true, _workspace.workspaceUuid)
+          )
           .catch(() => {})
       }
     } catch (err: any) {
@@ -1339,6 +1397,7 @@ export function startSessionManager (
   opt: {
     port: number
     pipelineFactory: PipelineFactory
+    communicationApiFactory: CommunicationApiFactory
     sessionFactory: SessionFactory
     brandingMap: BrandingMap
     serverFactory: ServerFactory
@@ -1358,7 +1417,7 @@ export function startSessionManager (
     opt.brandingMap,
     {
       pingTimeout: opt.pingTimeout ?? 10000,
-      reconnectTimeout: 5 // seconds to reconnect
+      reconnectTimeout: 30 // seconds to reconnect
     },
     opt.profiling,
     opt.accountsUrl,
@@ -1376,10 +1435,41 @@ export function startSessionManager (
       },
       ctx,
       opt.pipelineFactory,
+      opt.communicationApiFactory,
       opt.port,
       opt.accountsUrl,
       opt.externalStorage
     ),
     sessionManager: sessions
   }
+}
+
+async function closeWorkspace (ctx: MeasureContext, workspace: Workspace): Promise<void> {
+  const closePipeline = async (): Promise<void> => {
+    try {
+      await ctx.with('close-pipeline', {}, async () => {
+        await (await workspace.pipeline).close()
+      })
+    } catch (err: any) {
+      Analytics.handleError(err)
+      ctx.error('close-pipeline-error', { error: err })
+    }
+  }
+
+  const closeCommunicationApi = async (): Promise<void> => {
+    try {
+      await ctx.with('close-communication-api', {}, async () => {
+        await (await workspace.communicationApi).close()
+      })
+    } catch (err: any) {
+      Analytics.handleError(err)
+      ctx.error('close-pipeline-error', { error: err })
+    }
+  }
+  await ctx.with('closing', {}, async () => {
+    const to = timeoutPromise(120000)
+    const closePromises = [closePipeline(), closeCommunicationApi()]
+    await Promise.race([Promise.all(closePromises), to.promise])
+    to.cancelHandle()
+  })
 }

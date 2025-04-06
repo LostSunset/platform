@@ -38,7 +38,11 @@ import type {
   WorkspaceLoginInfo,
   RegionInfo,
   WorkspaceOperation,
-  MailboxInfo
+  MailboxInfo,
+  Integration,
+  IntegrationKey,
+  IntegrationSecret,
+  IntegrationSecretKey
 } from './types'
 
 /** @public */
@@ -61,6 +65,15 @@ export interface AccountClient {
   requestPasswordReset: (email: string) => Promise<void>
   sendInvite: (email: string, role: AccountRole) => Promise<void>
   resendInvite: (email: string, role: AccountRole) => Promise<void>
+  createInviteLink: (
+    email: string,
+    role: AccountRole,
+    autoJoin: boolean,
+    firstName: string,
+    lastName: string,
+    navigateUrl?: string,
+    expHours?: number
+  ) => Promise<string>
   leaveWorkspace: (account: string) => Promise<LoginInfo | null>
   changeUsername: (first: string, last: string) => Promise<void>
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>
@@ -89,11 +102,11 @@ export interface AccountClient {
   updateWorkspaceRole: (account: string, role: AccountRole) => Promise<void>
   updateWorkspaceName: (name: string) => Promise<void>
   deleteWorkspace: () => Promise<void>
-  findPersonBySocialKey: (socialKey: string) => Promise<PersonUuid | undefined>
-  findPersonBySocialId: (socialId: PersonId) => Promise<PersonUuid | undefined>
+  findPersonBySocialKey: (socialKey: string, requireAccount?: boolean) => Promise<PersonUuid | undefined>
+  findPersonBySocialId: (socialId: PersonId, requireAccount?: boolean) => Promise<PersonUuid | undefined>
   findSocialIdBySocialKey: (socialKey: string) => Promise<PersonId | undefined>
   getMailboxOptions: () => Promise<MailboxOptions>
-  createMailbox: (name: string, domain: string) => Promise<void>
+  createMailbox: (name: string, domain: string) => Promise<{ mailbox: string, socialId: PersonId }>
   getMailboxes: () => Promise<MailboxInfo[]>
   deleteMailbox: (mailbox: string) => Promise<void>
 
@@ -126,6 +139,26 @@ export interface AccountClient {
     firstName: string,
     lastName: string
   ) => Promise<{ uuid: PersonUuid, socialId: PersonId }>
+  addSocialIdToPerson: (person: PersonUuid, type: SocialIdType, value: string, confirmed: boolean) => Promise<PersonId>
+  createIntegration: (integration: Integration) => Promise<void>
+  updateIntegration: (integration: Integration) => Promise<void>
+  deleteIntegration: (integrationKey: IntegrationKey) => Promise<void>
+  getIntegration: (integrationKey: IntegrationKey) => Promise<Integration | null>
+  listIntegrations: (filter: {
+    socialId?: PersonId
+    kind?: string
+    workspaceUuid?: WorkspaceUuid | null
+  }) => Promise<Integration[]>
+  addIntegrationSecret: (integrationSecret: IntegrationSecret) => Promise<void>
+  updateIntegrationSecret: (integrationSecret: IntegrationSecret) => Promise<void>
+  deleteIntegrationSecret: (integrationSecretKey: IntegrationSecretKey) => Promise<void>
+  getIntegrationSecret: (integrationSecretKey: IntegrationSecretKey) => Promise<IntegrationSecret | null>
+  listIntegrationsSecrets: (filter: {
+    socialId?: PersonId
+    kind?: string
+    workspaceUuid?: WorkspaceUuid | null
+    key?: string
+  }) => Promise<IntegrationSecret[]>
 
   setCookie: () => Promise<void>
   deleteCookie: () => Promise<void>
@@ -306,6 +339,23 @@ class AccountClientImpl implements AccountClient {
     }
 
     await this.rpc(request)
+  }
+
+  async createInviteLink (
+    email: string,
+    role: AccountRole,
+    autoJoin: boolean,
+    firstName: string,
+    lastName: string,
+    navigateUrl?: string,
+    expHours?: number
+  ): Promise<string> {
+    const request = {
+      method: 'createInviteLink' as const,
+      params: { email, role, autoJoin, firstName, lastName, navigateUrl, expHours }
+    }
+
+    return await this.rpc(request)
   }
 
   async leaveWorkspace (account: string): Promise<LoginInfo | null> {
@@ -554,19 +604,19 @@ class AccountClientImpl implements AccountClient {
     await this.rpc(request)
   }
 
-  async findPersonBySocialKey (socialString: string): Promise<PersonUuid | undefined> {
+  async findPersonBySocialKey (socialString: string, requireAccount?: boolean): Promise<PersonUuid | undefined> {
     const request = {
       method: 'findPersonBySocialKey' as const,
-      params: { socialString }
+      params: { socialString, requireAccount }
     }
 
     return await this.rpc(request)
   }
 
-  async findPersonBySocialId (socialId: PersonId): Promise<PersonUuid | undefined> {
+  async findPersonBySocialId (socialId: PersonId, requireAccount?: boolean): Promise<PersonUuid | undefined> {
     const request = {
       method: 'findPersonBySocialId' as const,
-      params: { socialId }
+      params: { socialId, requireAccount }
     }
 
     return await this.rpc(request)
@@ -644,6 +694,20 @@ class AccountClientImpl implements AccountClient {
     return await this.rpc(request)
   }
 
+  async addSocialIdToPerson (
+    person: PersonUuid,
+    type: SocialIdType,
+    value: string,
+    confirmed: boolean
+  ): Promise<PersonId> {
+    const request = {
+      method: 'addSocialIdToPerson' as const,
+      params: { person, type, value, confirmed }
+    }
+
+    return await this.rpc(request)
+  }
+
   async getMailboxOptions (): Promise<MailboxOptions> {
     const request = {
       method: 'getMailboxOptions' as const,
@@ -653,13 +717,13 @@ class AccountClientImpl implements AccountClient {
     return await this.rpc(request)
   }
 
-  async createMailbox (name: string, domain: string): Promise<void> {
+  async createMailbox (name: string, domain: string): Promise<{ mailbox: string, socialId: PersonId }> {
     const request = {
       method: 'createMailbox' as const,
       params: { name, domain }
     }
 
-    await this.rpc(request)
+    return await this.rpc(request)
   }
 
   async getMailboxes (): Promise<MailboxInfo[]> {
@@ -678,6 +742,105 @@ class AccountClientImpl implements AccountClient {
     }
 
     await this.rpc(request)
+  }
+
+  async createIntegration (integration: Integration): Promise<void> {
+    const request = {
+      method: 'createIntegration' as const,
+      params: integration
+    }
+
+    await this.rpc(request)
+  }
+
+  async updateIntegration (integration: Integration): Promise<void> {
+    const request = {
+      method: 'updateIntegration' as const,
+      params: integration
+    }
+
+    await this.rpc(request)
+  }
+
+  async deleteIntegration (integrationKey: IntegrationKey): Promise<void> {
+    const request = {
+      method: 'deleteIntegration' as const,
+      params: integrationKey
+    }
+
+    await this.rpc(request)
+  }
+
+  async getIntegration (integrationKey: IntegrationKey): Promise<Integration | null> {
+    const request = {
+      method: 'getIntegration' as const,
+      params: integrationKey
+    }
+
+    return await this.rpc(request)
+  }
+
+  async listIntegrations (filter: {
+    socialId?: PersonId
+    kind?: string
+    workspaceUuid?: WorkspaceUuid | null
+  }): Promise<Integration[]> {
+    const request = {
+      method: 'listIntegrations' as const,
+      params: filter
+    }
+
+    return await this.rpc(request)
+  }
+
+  async addIntegrationSecret (integrationSecret: IntegrationSecret): Promise<void> {
+    const request = {
+      method: 'addIntegrationSecret' as const,
+      params: integrationSecret
+    }
+
+    await this.rpc(request)
+  }
+
+  async updateIntegrationSecret (integrationSecret: IntegrationSecret): Promise<void> {
+    const request = {
+      method: 'updateIntegrationSecret' as const,
+      params: integrationSecret
+    }
+
+    await this.rpc(request)
+  }
+
+  async deleteIntegrationSecret (integrationSecretKey: IntegrationSecretKey): Promise<void> {
+    const request = {
+      method: 'deleteIntegrationSecret' as const,
+      params: integrationSecretKey
+    }
+
+    await this.rpc(request)
+  }
+
+  async getIntegrationSecret (integrationSecretKey: IntegrationSecretKey): Promise<IntegrationSecret | null> {
+    const request = {
+      method: 'getIntegrationSecret' as const,
+      params: integrationSecretKey
+    }
+
+    return await this.rpc(request)
+  }
+
+  async listIntegrationsSecrets (filter: {
+    socialId?: PersonId
+    kind?: string
+    workspaceUuid?: WorkspaceUuid | null
+    key?: string
+  }): Promise<IntegrationSecret[]> {
+    const request = {
+      method: 'listIntegrationsSecrets' as const,
+      params: filter
+    }
+
+    return await this.rpc(request)
   }
 
   async setCookie (): Promise<void> {

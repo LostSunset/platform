@@ -113,8 +113,9 @@ import {
 } from '@hcengineering/model-server-controlled-documents'
 import { surveyId, createModel as surveyModel } from '@hcengineering/model-survey'
 import { presenceId, createModel as presenceModel } from '@hcengineering/model-presence'
+import { chatId, createModel as chatModel } from '@hcengineering/model-chat'
 import processes, { processId, createModel as processModel } from '@hcengineering/model-process'
-
+import { createModel as inboxModel, inboxId } from '@hcengineering/model-inbox'
 import { type Plugin } from '@hcengineering/platform'
 
 interface ConfigurablePlugin extends Omit<Data<PluginConfiguration>, 'pluginId' | 'transactions'> {}
@@ -164,6 +165,18 @@ export default function buildModel (enabled: string[] = ['*'], disabled: string[
     [tagsModel, tagsId],
     [viewModel, viewId],
     [workbenchModel, workbenchId],
+    [
+      cardModel,
+      cardId,
+      {
+        label: card.string.Cards,
+        description: card.string.ConfigDescription,
+        enabled: true,
+        beta: true,
+        icon: card.icon.Card,
+        classFilter: defaultFilter
+      }
+    ],
     [
       contactModel,
       contactId,
@@ -370,18 +383,6 @@ export default function buildModel (enabled: string[] = ['*'], disabled: string[
     [exportModel, exportId],
     [aiBotModel, aiBotId],
     [
-      cardModel,
-      cardId,
-      {
-        label: card.string.Cards,
-        description: card.string.ConfigDescription,
-        enabled: true,
-        beta: true,
-        icon: card.icon.Card,
-        classFilter: defaultFilter
-      }
-    ],
-    [
       processModel,
       processId,
       {
@@ -461,6 +462,8 @@ export default function buildModel (enabled: string[] = ['*'], disabled: string[
       }
     ],
     [mailModel, mailId],
+    [chatModel, chatId],
+    [inboxModel, inboxId],
 
     [serverCoreModel, serverCoreId],
     [serverAttachmentModel, serverAttachmentId],

@@ -59,11 +59,14 @@
         .then((res) => (subEditor = res))
         .catch((err) => {
           subEditor = undefined
+          subEditorTitle = undefined
           console.error(err)
         })
     } else {
       selectedSubObjectId = undefined
+      subEditorTitle = undefined
       subEditor = undefined
+      subEditorTitle = undefined
     }
   }
 

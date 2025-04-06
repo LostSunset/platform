@@ -37,6 +37,12 @@
     "Random": "Случайное",
     "AllProcesses": "Все процессы",
     "MyProcesses": "Мои процессы",
-    "ShowDone": "Показать выполненные"
+    "ShowDone": "Показать выполненные",
+    "Add": "Добавить",
+    "Subtract": "Вычесть",
+    "Offset": "Смещение",
+    "FirstWorkingDayAfter": "Первый рабочий день после",
+    "FallbackValueError": "Показывать ошибку, если недоступно",
+    "Required": "Обязательно"
   }
 }

@@ -181,6 +181,7 @@
   min-height: 0;
 }
 .hulyStatusBarButton {
+  overflow: hidden;
   gap: var(--spacing-1);
   padding: var(--spacing-0_25) var(--spacing-0_25) var(--spacing-0_25) var(--spacing-1);
   height: 1.625rem;
@@ -553,7 +554,7 @@
 
   &.statusButton {
     padding: 0 8px;
-    height: 20px;
+    height: 28px;
     min-width: 20px;
     font-size: 13px;
     border-radius: 4px;
@@ -561,7 +562,7 @@
     &.square {
       flex-shrink: 0;
       padding: 2px;
-      width: 20px;
+      width: 28px;
     }
   }
   &:focus { z-index: 1; }

@@ -925,10 +925,10 @@ abstract class PostgresAdapterBase implements DbAdapter {
         const res = this.getLookupValue(modelJoin.path, lookup)
         if (res === undefined) continue
         const { obj, key } = res
-        const val = this.getModelLookupValue<T>(doc, modelJoin, simpleJoins)
+        const val = this.getModelLookupValue<T>(doc, modelJoin, [...simpleJoins, ...modelJoins])
         if (val !== undefined && modelJoin.toClass !== undefined) {
           const res = this.modelDb.findAllSync(modelJoin.toClass, {
-            [modelJoin.toField]: (doc as any)[modelJoin.fromField]
+            [modelJoin.toField]: val
           })
           obj[key] = modelJoin.isReverse ? res : res[0]
         }
@@ -972,11 +972,11 @@ abstract class PostgresAdapterBase implements DbAdapter {
     }
   }
 
-  private getModelLookupValue<T extends Doc>(doc: WithLookup<T>, join: JoinProps, simpleJoins: JoinProps[]): any {
+  private getModelLookupValue<T extends Doc>(doc: WithLookup<T>, join: JoinProps, otherJoins: JoinProps[]): any {
     if (join.fromAlias.startsWith('lookup_')) {
-      const simple = simpleJoins.find((j) => j.toAlias === join.fromAlias)
-      if (simple !== undefined) {
-        const val = this.getLookupValue(simple.path, doc.$lookup ?? {})
+      const other = otherJoins.find((j) => j.toAlias === join.fromAlias)
+      if (other !== undefined) {
+        const val = this.getLookupValue(other.path, doc.$lookup ?? {})
         if (val !== undefined) {
           const data = val.obj[val.key]
           return data[join.fromField]
@@ -1014,6 +1014,13 @@ abstract class PostgresAdapterBase implements DbAdapter {
     return res
   }
 
+  private isArrayLookup (_class: Ref<Class<Doc>>, key: string): boolean {
+    const attr = this.hierarchy.findAttribute(_class, key)
+    if (attr === undefined) return false
+    if (attr.type._class === core.class.ArrOf) return true
+    return false
+  }
+
   private buildJoinValue<T extends Doc>(
     clazz: Ref<Class<T>>,
     lookup: Lookup<T>,
@@ -1031,6 +1038,10 @@ abstract class PostgresAdapterBase implements DbAdapter {
       const _class = Array.isArray(value) ? value[0] : value
       const nested = Array.isArray(value) ? value[1] : undefined
       const domain = translateDomain(this.hierarchy.getDomain(_class))
+      if (this.isArrayLookup(clazz, key)) {
+        this.getArrayLookup(baseDomain, key, _class, res, domain, parentKey)
+        continue
+      }
       const tkey = domain === DOMAIN_MODEL ? key : this.transformKey(baseDomain, clazz, key)
       const as = `lookup_${domain}_${parentKey !== undefined ? parentKey + '_lookup_' + key : key}`
       res.push({
@@ -1047,6 +1058,34 @@ abstract class PostgresAdapterBase implements DbAdapter {
         this.buildJoinValue(_class, nested, res, key, as)
       }
     }
+  }
+
+  private getArrayLookup (
+    parentDomain: string,
+    key: string,
+    _class: Ref<Class<Doc>>,
+    result: JoinProps[],
+    domain: string,
+    parent?: string
+  ): void {
+    const desc = this.hierarchy
+      .getDescendants(this.hierarchy.getBaseClass(_class))
+      .filter((it) => !this.hierarchy.isMixin(it))
+    const as = `reverse_lookup_${domain}_${parent !== undefined ? parent + '_lookup_' + key : key}`
+    const from = isDataField(domain, key)
+      ? `ANY(SELECT jsonb_array_elements_text(${parentDomain}.data->'${key}'))`
+      : `ANY(${parentDomain}."${key}")`
+    result.push({
+      isReverse: true,
+      table: domain,
+      toAlias: as,
+      toField: '_id',
+      classes: desc,
+      path: parent !== undefined ? `${parent}.${key}` : key,
+      fromAlias: '',
+      toClass: _class,
+      fromField: from
+    })
   }
 
   private getReverseLookupValue (
@@ -1438,7 +1477,7 @@ abstract class PostgresAdapterBase implements DbAdapter {
       }
     }
     return [
-      `(SELECT jsonb_agg(${join.toAlias}.*) FROM ${join.table} AS ${join.toAlias} WHERE ${join.fromAlias}.${join.fromField} = ${join.toAlias}."${join.toField}" ${classsesQuery}) AS ${join.toAlias}`
+      `(SELECT jsonb_agg(${join.toAlias}.*) FROM ${join.table} AS ${join.toAlias} WHERE ${join.toAlias}."${join.toField}" = ${join.fromAlias}${join.fromAlias !== '' ? '.' : ''}${join.fromField} ${classsesQuery}) AS ${join.toAlias}`
     ]
   }
 

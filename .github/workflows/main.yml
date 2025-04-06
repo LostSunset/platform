@@ -43,7 +43,7 @@ env:
     workers
     ws-tests
   PublishTempFolder: publish_artifacts
-  INIT_SCRIPTS_BRANCH: 'unified-init-scripts'
+  INIT_SCRIPTS_BRANCH: 'main'
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -75,6 +75,10 @@ jobs:
 
       - name: Checking for mis-matching dependencies...
         run: node common/scripts/install-run-rush.js check
+
+      - name: Prepare .npmrc for GitHub Packages
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${{secrets.GITHUB_TOKEN}}" > ~/.npmrc
 
       - name: Installing...
         run: node common/scripts/install-run-rush.js install
@@ -196,7 +200,7 @@ jobs:
           cd ./tests
           ./prepare-tests.sh
       - name: Testing...
-        run: node common/scripts/install-run-rush.js test
+        run: node common/scripts/install-run-rush.js test --verbose
         env:
           DB_URL: 'postgresql://root@localhost:26258/defaultdb?sslmode=disable'
           ELASTIC_URL: 'http://localhost:9201'
@@ -225,6 +229,10 @@ jobs:
 
       - name: Checking for mis-matching dependencies...
         run: node common/scripts/install-run-rush.js check
+
+      - name: Prepare .npmrc for GitHub Packages
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${{secrets.GITHUB_TOKEN}}" > ~/.npmrc
 
       - name: Installing...
         run: node common/scripts/install-run-rush.js install
@@ -350,6 +358,10 @@ jobs:
       - name: Checking for mis-matching dependencies...
         run: node common/scripts/install-run-rush.js check
 
+      - name: Prepare .npmrc for GitHub Packages
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${{secrets.GITHUB_TOKEN}}" > ~/.npmrc
+
       - name: Installing...
         run: node common/scripts/install-run-rush.js install
 
@@ -423,6 +435,10 @@ jobs:
       - name: Checking for mis-matching dependencies...
         run: node common/scripts/install-run-rush.js check
 
+      - name: Prepare .npmrc for GitHub Packages
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${{secrets.GITHUB_TOKEN}}" > ~/.npmrc
+
       - name: Installing...
         run: node common/scripts/install-run-rush.js install
 
@@ -494,6 +510,10 @@ jobs:
 
       - name: Checking for mis-matching dependencies...
         run: node common/scripts/install-run-rush.js check
+
+      - name: Prepare .npmrc for GitHub Packages
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${{secrets.GITHUB_TOKEN}}" > ~/.npmrc
 
       - name: Installing...
         run: node common/scripts/install-run-rush.js install
@@ -595,6 +615,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/pnpm-lock.yaml') }}
 
+      - name: Prepare .npmrc for GitHub Packages
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${{secrets.GITHUB_TOKEN}}" > ~/.npmrc
+
       - name: Installing...
         run: node common/scripts/install-run-rush.js install
 
@@ -667,6 +691,10 @@ jobs:
           key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Prepare .npmrc for GitHub Packages
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${{secrets.GITHUB_TOKEN}}" > ~/.npmrc
 
       - name: Installing...
         run: node common/scripts/install-run-rush.js install --purge

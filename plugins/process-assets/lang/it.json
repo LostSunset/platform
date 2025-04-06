@@ -36,6 +36,12 @@
     "Random": "Casuale",
     "AllProcesses": "Tutti i processi",
     "MyProcesses": "I miei processi",
-    "ShowDone": "Mostra completato"
+    "ShowDone": "Mostra completato",
+    "Add": "Aggiungi",
+    "Subtract": "Sottrai",
+    "Offset": "Offset",
+    "FirstWorkingDayAfter": "Primo giorno lavorativo dopo",
+    "FallbackValueError": "Mostra errore se vuoto",
+    "Required": "Obbligatorio"
   }
 }

@@ -56,6 +56,9 @@ import { testManagementOperation } from '@hcengineering/model-test-management'
 import { surveyOperation } from '@hcengineering/model-survey'
 import { cardOperation } from '@hcengineering/model-card'
 import { aiBotId, aiBotOperation } from '@hcengineering/model-ai-bot'
+import { chatId, chatOperation } from '@hcengineering/model-chat'
+import { inboxId, inboxOperation } from '@hcengineering/model-inbox'
+import { processId, processOperation } from '@hcengineering/model-process'
 
 export const migrateOperations: [string, MigrateOperation][] = [
   ['core', coreOperation],
@@ -100,5 +103,8 @@ export const migrateOperations: [string, MigrateOperation][] = [
   ['workbench', workbenchOperation],
   ['testManagement', testManagementOperation],
   ['survey', surveyOperation],
-  [aiBotId, aiBotOperation]
+  [aiBotId, aiBotOperation],
+  [chatId, chatOperation],
+  [inboxId, inboxOperation],
+  [processId, processOperation]
 ]

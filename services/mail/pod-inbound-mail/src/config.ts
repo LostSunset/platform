@@ -21,6 +21,10 @@ interface Config {
   secret: string
   accountsUrl: string
   workspaceUrl: string
+  ignoredAddresses: string[]
+  hookToken?: string
+  mailSizeLimit?: string
+  storageConfig?: string
 }
 
 const config: Config = {
@@ -32,7 +36,11 @@ const config: Config = {
       return process.env.WORKSPACE_URL
     }
     throw Error('WORKSPACE_URL env var is not set')
-  })()
+  })(),
+  ignoredAddresses: process.env.IGNORED_ADDRESSES?.split(',') ?? [],
+  hookToken: process.env.HOOK_TOKEN,
+  mailSizeLimit: process.env.MAIL_SIZE_LIMIT ?? '50mb',
+  storageConfig: process.env.STORAGE_CONFIG
 }
 
 export default config
