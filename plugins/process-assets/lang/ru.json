@@ -1,4 +1,3 @@
-
 {
   "string": {
     "Method": "Метод",
@@ -43,6 +42,25 @@
     "Offset": "Смещение",
     "FirstWorkingDayAfter": "Первый рабочий день после",
     "FallbackValueError": "Показывать ошибку, если недоступно",
-    "Required": "Обязательно"
+    "Required": "Обязательно",
+    "ParallelExecutionForbidden": "Одновременное выполнение запрещено",
+    "StartAutomatically": "Запускать автоматически",
+    "Error": "Ошибка",
+    "Continue": "Продолжить",
+    "RequestFromUser": "Запросить у пользователя",
+    "EnterValue": "Введите значение",
+    "OnToDoClose": "При закрытии ToDo",
+    "OnSubProcessesDone": "При завершении подпроцессов"
+  },
+  "error": {
+    "MethodNotFound": "Метод не найден: {methodId}",
+    "InternalServerError": "Внутренняя ошибка сервера, свяжитесь с поддержкой, идентификатор ошибки: {errorId}",
+    "EmptyRelatedObjectValue": "Пустое значение {attr} для связанного объекта: {parent}",
+    "RelatedObjectNotFound": "Связанный объект не найден: {attr}",
+    "RelationNotExists": "Связь не существует: {association}",
+    "EmptyAttributeContextValue": "Пустое значение атрибута: {attr}",
+    "UserRequestedValueNotProvided": "Знвчение не предоставлено пользователем: {attr}",
+    "ObjectNotFound": "Объект не найден: {_id}",
+    "AttributeNotExists": "Атрибут не существует: {key}"
   }
 }

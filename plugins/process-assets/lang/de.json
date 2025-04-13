@@ -42,6 +42,25 @@
     "Offset": "Verschieben",
     "FirstWorkingDayAfter": "Erste Arbeitstag nach",
     "FallbackValueError": "Fehler anzeigen, wenn leer",
-    "Required": "Erforderlich"
+    "Required": "Erforderlich",
+    "ParallelExecutionForbidden": "Parallele Ausführung verboten",
+    "StartAutomatically": "Automatisch starten",
+    "Error": "Fehler",
+    "Continue": "Fortsetzen",
+    "RequestFromUser": "Anfrage von Benutzer",
+    "EnterValue": "Wert eingeben",
+    "OnToDoClose": "Beim Schließen von Aufgabe",
+    "OnSubProcessesDone": "Beim Abschluss von Unterprozessen"
+  },  
+  "error": {
+    "MethodNotFound": "Methode nicht gefunden: {methodId}",
+    "AttributeNotExists": "Attribut existiert nicht: {key}",
+    "RelatedObjectNotFound": "Verwandtes Objekt nicht gefunden: {attr}",
+    "RelationNotExists": "Beziehung existiert nicht: {association}",
+    "EmptyAttributeContextValue": "Leerer Attributwert: {attr}",
+    "UserRequestedValueNotProvided": "Benutzer angeforderter Wert nicht bereitgestellt: {attr}",
+    "ObjectNotFound": "Objekt nicht gefunden: {_id}",
+    "EmptyRelatedObjectValue": "Leerer verwandtes Objekt {parent} Wert: {attr}",
+    "InternalServerError": "Interner Serverfehler, bitte kontaktieren Sie den Support, Fehler-ID: {errorId}"
   }
 }

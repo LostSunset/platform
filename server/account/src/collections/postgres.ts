@@ -19,8 +19,8 @@ import {
   type Person,
   type WorkspaceMemberInfo,
   AccountRole,
-  type PersonUuid,
-  type WorkspaceUuid
+  type WorkspaceUuid,
+  type AccountUuid
 } from '@hcengineering/core'
 
 import type {
@@ -92,15 +92,36 @@ function formatVar (idx: number, type?: string): string {
   return type != null ? `$${idx}::${type}` : `$${idx}`
 }
 
+export interface PostgresDbCollectionOptions<T extends Record<string, any>, K extends keyof T | undefined = undefined> {
+  idKey?: K
+  ns?: string
+  fieldTypes?: Record<string, string>
+  timestampFields?: Array<keyof T>
+}
+
 export class PostgresDbCollection<T extends Record<string, any>, K extends keyof T | undefined = undefined>
 implements DbCollection<T> {
   constructor (
     readonly name: string,
     readonly client: Sql,
-    readonly idKey?: K,
-    readonly ns?: string,
-    readonly fieldTypes: Record<string, string> = {}
+    readonly options: PostgresDbCollectionOptions<T, K> = {}
   ) {}
+
+  get ns (): string {
+    return this.options.ns ?? ''
+  }
+
+  get idKey (): K | undefined {
+    return this.options.idKey
+  }
+
+  get fieldTypes (): Record<string, string> {
+    return this.options.fieldTypes ?? {}
+  }
+
+  get timestampFields (): Array<keyof T> {
+    return this.options.timestampFields ?? []
+  }
 
   getTableName (): string {
     if (this.ns === '') {
@@ -180,8 +201,8 @@ implements DbCollection<T> {
           break
         }
         default: {
-          currIdx++
           if (qKey !== null) {
+            currIdx++
             whereChunks.push(`"${snakeKey}" = ${formatVar(currIdx, castType)}`)
             values.push(qKey)
           } else {
@@ -206,7 +227,13 @@ implements DbCollection<T> {
   }
 
   protected convertToObj (row: unknown): T {
-    return convertKeysToCamelCase(row) as T
+    const res = convertKeysToCamelCase(row)
+    for (const field of this.timestampFields) {
+      const val = Number.parseInt(res[field])
+      res[field] = Number.isNaN(val) ? null : val
+    }
+
+    return res as T
   }
 
   async find (query: Query<T>, sort?: Sort<T>, limit?: number, client?: Sql): Promise<T[]> {
@@ -319,11 +346,8 @@ export class AccountPostgresDbCollection
   implements DbCollection<Account> {
   private readonly passwordKeys = ['hash', 'salt']
 
-  constructor (
-    readonly client: Sql,
-    readonly ns?: string
-  ) {
-    super('account', client, 'uuid', ns)
+  constructor (client: Sql, ns?: string) {
+    super('account', client, { idKey: 'uuid', ns })
   }
 
   getPasswordsTableName (): string {
@@ -413,18 +437,36 @@ export class PostgresAccountDB implements AccountDB {
     readonly client: Sql,
     readonly ns: string = 'global_account'
   ) {
-    this.person = new PostgresDbCollection<Person, 'uuid'>('person', client, 'uuid', ns)
+    this.person = new PostgresDbCollection<Person, 'uuid'>('person', client, { ns, idKey: 'uuid' })
     this.account = new AccountPostgresDbCollection(client, ns)
-    this.socialId = new PostgresDbCollection<SocialId, '_id'>('social_id', client, '_id', ns)
-    this.workspaceStatus = new PostgresDbCollection<WorkspaceStatus>('workspace_status', client, undefined, ns)
-    this.workspace = new PostgresDbCollection<Workspace, 'uuid'>('workspace', client, 'uuid', ns)
-    this.accountEvent = new PostgresDbCollection<AccountEvent>('account_events', client, undefined, ns)
-    this.otp = new PostgresDbCollection<OTP>('otp', client, undefined, ns)
-    this.invite = new PostgresDbCollection<WorkspaceInvite, 'id'>('invite', client, 'id', ns)
-    this.mailbox = new PostgresDbCollection<Mailbox, 'mailbox'>('mailbox', client, undefined, ns)
-    this.mailboxSecret = new PostgresDbCollection<MailboxSecret>('mailbox_secrets', client, undefined, ns)
-    this.integration = new PostgresDbCollection<Integration>('integrations', client, undefined, ns)
-    this.integrationSecret = new PostgresDbCollection<IntegrationSecret>('integration_secrets', client, undefined, ns)
+    this.socialId = new PostgresDbCollection<SocialId, '_id'>('social_id', client, {
+      ns,
+      idKey: '_id',
+      timestampFields: ['createdOn', 'verifiedOn']
+    })
+    this.workspaceStatus = new PostgresDbCollection<WorkspaceStatus>('workspace_status', client, {
+      ns,
+      timestampFields: ['lastProcessingTime', 'lastVisit']
+    })
+    this.workspace = new PostgresDbCollection<Workspace, 'uuid'>('workspace', client, {
+      ns,
+      idKey: 'uuid',
+      timestampFields: ['createdOn']
+    })
+    this.accountEvent = new PostgresDbCollection<AccountEvent>('account_events', client, {
+      ns,
+      timestampFields: ['time']
+    })
+    this.otp = new PostgresDbCollection<OTP>('otp', client, { ns, timestampFields: ['expiresOn', 'createdOn'] })
+    this.invite = new PostgresDbCollection<WorkspaceInvite, 'id'>('invite', client, {
+      ns,
+      idKey: 'id',
+      timestampFields: ['expiresOn']
+    })
+    this.mailbox = new PostgresDbCollection<Mailbox, 'mailbox'>('mailbox', client, { ns })
+    this.mailboxSecret = new PostgresDbCollection<MailboxSecret>('mailbox_secrets', client, { ns })
+    this.integration = new PostgresDbCollection<Integration>('integrations', client, { ns })
+    this.integrationSecret = new PostgresDbCollection<IntegrationSecret>('integration_secrets', client, { ns })
   }
 
   getWsMembersTableName (): string {
@@ -477,22 +519,22 @@ export class PostgresAccountDB implements AccountDB {
     })
   }
 
-  async assignWorkspace (accountUuid: PersonUuid, workspaceUuid: WorkspaceUuid, role: AccountRole): Promise<void> {
+  async assignWorkspace (accountUuid: AccountUuid, workspaceUuid: WorkspaceUuid, role: AccountRole): Promise<void> {
     await this
       .client`INSERT INTO ${this.client(this.getWsMembersTableName())} (workspace_uuid, account_uuid, role) VALUES (${workspaceUuid}, ${accountUuid}, ${role})`
   }
 
-  async unassignWorkspace (accountUuid: PersonUuid, workspaceUuid: WorkspaceUuid): Promise<void> {
+  async unassignWorkspace (accountUuid: AccountUuid, workspaceUuid: WorkspaceUuid): Promise<void> {
     await this
       .client`DELETE FROM ${this.client(this.getWsMembersTableName())} WHERE workspace_uuid = ${workspaceUuid} AND account_uuid = ${accountUuid}`
   }
 
-  async updateWorkspaceRole (accountUuid: PersonUuid, workspaceUuid: WorkspaceUuid, role: AccountRole): Promise<void> {
+  async updateWorkspaceRole (accountUuid: AccountUuid, workspaceUuid: WorkspaceUuid, role: AccountRole): Promise<void> {
     await this
       .client`UPDATE ${this.client(this.getWsMembersTableName())} SET role = ${role} WHERE workspace_uuid = ${workspaceUuid} AND account_uuid = ${accountUuid}`
   }
 
-  async getWorkspaceRole (accountUuid: PersonUuid, workspaceUuid: WorkspaceUuid): Promise<AccountRole | null> {
+  async getWorkspaceRole (accountUuid: AccountUuid, workspaceUuid: WorkspaceUuid): Promise<AccountRole | null> {
     const res: any = await this
       .client`SELECT role FROM ${this.client(this.getWsMembersTableName())} WHERE workspace_uuid = ${workspaceUuid} AND account_uuid = ${accountUuid}`
 
@@ -509,7 +551,7 @@ export class PostgresAccountDB implements AccountDB {
     }))
   }
 
-  async getAccountWorkspaces (accountUuid: PersonUuid): Promise<WorkspaceInfoWithStatus[]> {
+  async getAccountWorkspaces (accountUuid: AccountUuid): Promise<WorkspaceInfoWithStatus[]> {
     const sql = `SELECT 
           w.uuid,
           w.name,
@@ -656,12 +698,12 @@ export class PostgresAccountDB implements AccountDB {
     return convertKeysToCamelCase(res[0]) as WorkspaceInfoWithStatus
   }
 
-  async setPassword (accountUuid: PersonUuid, hash: Buffer, salt: Buffer): Promise<void> {
+  async setPassword (accountUuid: AccountUuid, hash: Buffer, salt: Buffer): Promise<void> {
     await this
       .client`UPSERT INTO ${this.client(this.account.getPasswordsTableName())} (account_uuid, hash, salt) VALUES (${accountUuid}, ${hash.buffer as any}::bytea, ${salt.buffer as any}::bytea)`
   }
 
-  async resetPassword (accountUuid: PersonUuid): Promise<void> {
+  async resetPassword (accountUuid: AccountUuid): Promise<void> {
     await this
       .client`DELETE FROM ${this.client(this.account.getPasswordsTableName())} WHERE account_uuid = ${accountUuid}`
   }
@@ -676,7 +718,8 @@ export class PostgresAccountDB implements AccountDB {
       this.getV4Migration(),
       this.getV4Migration1(),
       this.getV5Migration(),
-      this.getV6Migration()
+      this.getV6Migration(),
+      this.getV7Migration()
     ]
   }
 
@@ -955,11 +998,18 @@ export class PostgresAccountDB implements AccountDB {
           _def_ws_uuid UUID NOT NULL GENERATED ALWAYS AS (COALESCE(workspace_uuid, '00000000-0000-0000-0000-000000000000')) STORED NOT VISIBLE,
           key STRING,
           secret STRING NOT NULL,
-          CONSTRAINT integration_secrets_pk PRIMARY KEY (social_id, kind, _def_ws_uuid, key),
-          CONSTRAINT integration_secrets_integrations_fk FOREIGN KEY (social_id, kind, _def_ws_uuid) 
-              REFERENCES ${this.ns}.integrations(social_id, kind, _def_ws_uuid)
-              ON DELETE CASCADE
+          CONSTRAINT integration_secrets_pk PRIMARY KEY (social_id, kind, _def_ws_uuid, key)
       );
+      `
+    ]
+  }
+
+  private getV7Migration (): [string, string] {
+    return [
+      'account_db_v7_add_display_value',
+      `
+      ALTER TABLE ${this.ns}.social_id
+      ADD COLUMN IF NOT EXISTS display_value TEXT;
       `
     ]
   }

@@ -31,7 +31,8 @@ export default plugin(serverProcessId, {
   func: {
     RunSubProcess: '' as Resource<ExecuteFunc>,
     CreateToDo: '' as Resource<ExecuteFunc>,
-    UpdateCard: '' as Resource<ExecuteFunc>
+    UpdateCard: '' as Resource<ExecuteFunc>,
+    WaitSubProcess: '' as Resource<ExecuteFunc>
   },
   transform: {
     FirstValue: '' as Resource<TransformFunc>,
@@ -50,6 +51,7 @@ export default plugin(serverProcessId, {
     OnStateRemove: '' as Resource<TriggerFunc>,
     OnProcessRemove: '' as Resource<TriggerFunc>,
     OnProcessToDoClose: '' as Resource<TriggerFunc>,
-    OnProcessToDoRemove: '' as Resource<TriggerFunc>
+    OnProcessToDoRemove: '' as Resource<TriggerFunc>,
+    OnExecutionContinue: '' as Resource<TriggerFunc>
   }
 })

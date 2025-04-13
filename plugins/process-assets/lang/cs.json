@@ -42,6 +42,25 @@
     "Offset": "Posunout",
     "FirstWorkingDayAfter": "První pracovní den po",
     "FallbackValueError": "Zobrazit chybu, pokud není k dispozici",
-    "Required": "Povinné"
+    "Required": "Povinné",
+    "ParallelExecutionForbidden": "Nedovoluj paralelní spuštění",
+    "StartAutomatically": "Spustit automaticky",
+    "Error": "Chyba",
+    "Continue": "Pokračovat",
+    "RequestFromUser": "Požádat uživatele",
+    "EnterValue": "Zadat hodnotu",
+    "OnToDoClose": "Při zavření úkolu",
+    "OnSubProcessesDone": "Při dokončení podprocesů"
+  },
+  "error": {
+    "MethodNotFound": "Metoda nenalezena: {methodId}",
+    "AttributeNotExists": "Atribut neexistuje: {key}",
+    "RelatedObjectNotFound": "Související objekt nenalezen: {attr}",
+    "RelationNotExists": "Relace neexistuje: {association}",
+    "EmptyAttributeContextValue": "Prázdná hodnota atributu: {attr}",
+    "UserRequestedValueNotProvided": "Hodnota požadovaná uživatelem nebyla poskytnuta: {attr}",
+    "ObjectNotFound": "Objekt nenalezen: {_id}",
+    "EmptyRelatedObjectValue": "Prázdná hodnota {attr} souvisejícího objektu: {parent}",
+    "InternalServerError": "Vnitřní chyba serveru, kontaktujte podporu, chybové id: {errorId}"
   }
 }

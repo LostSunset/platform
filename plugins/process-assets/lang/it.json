@@ -42,6 +42,25 @@
     "Offset": "Offset",
     "FirstWorkingDayAfter": "Primo giorno lavorativo dopo",
     "FallbackValueError": "Mostra errore se vuoto",
-    "Required": "Obbligatorio"
+    "Required": "Obbligatorio",
+    "ParallelExecutionForbidden": "Esecuzione parallela vietata",
+    "StartAutomatically": "Avvia automaticamente",
+    "Error": "Errore",
+    "Continue": "Continua",
+    "RequestFromUser": "Richiedi da utente",
+    "EnterValue": "Inserisci valore",
+    "OnToDoClose": "Alla chiusura Attività",
+    "OnSubProcessesDone": "Alla fine dei sottoprocessi"
+  },
+  "error": {
+    "MethodNotFound": "Metodo non trovato: {methodId}",
+    "AttributeNotExists": "Attributo non esiste: {key}",
+    "RelatedObjectNotFound": "Oggetto correlato non trovato: {attr}",
+    "RelationNotExists": "Relazione non esiste: {association}",
+    "EmptyAttributeContextValue": "Valore attributo vuoto: {attr}",
+    "UserRequestedValueNotProvided": "Valore richiesto dall'utente non fornito: {attr}",
+    "ObjectNotFound": "Oggetto non trovato: {_id}",
+    "EmptyRelatedObjectValue": "Valore oggetto correlato vuoto: {parent} {attr}",
+    "InternalServerError": "Errore interno del server, contatta il supporto, id errore: {errorId}"
   }
 }

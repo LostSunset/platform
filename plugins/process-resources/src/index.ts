@@ -12,29 +12,36 @@
 // limitations under the License.
 
 import { type Resources } from '@hcengineering/platform'
-import ProcessEditor from './components/ProcessEditor.svelte'
-import SubProcessEditor from './components/SubProcessEditor.svelte'
-import UpdateCardEditor from './components/UpdateCardEditor.svelte'
-import ProcessesSettingSection from './components/ProcessesSection.svelte'
-import ToDoEditor from './components/ToDoEditor.svelte'
-import RunProcessPopup from './components/RunProcessPopup.svelte'
+import FunctionSelector from './components/attributeEditors/FunctionSelector.svelte'
+import NestedContextSelector from './components/attributeEditors/NestedContextSelector.svelte'
+import RelatedContextSelector from './components/attributeEditors/RelatedContextSelector.svelte'
+import DateOffsetEditor from './components/contextEditors/DateOffsetEditor.svelte'
+import NumberOffsetEditor from './components/contextEditors/NumberOffsetEditor.svelte'
+import RequestUserInput from './components/contextEditors/RequestUserInput.svelte'
+import ErrorPresenter from './components/ErrorPresenter.svelte'
+import ExecutonPresenter from './components/ExecutonPresenter.svelte'
+import ExecutonProgressPresenter from './components/ExecutonProgressPresenter.svelte'
+import Main from './components/Main.svelte'
 import SubProcessPresenter from './components/presenters/SubProcessPresenter.svelte'
 import ToDoPresenter from './components/presenters/ToDoPresenter.svelte'
 import UpdateCardPresenter from './components/presenters/UpdateCardPresenter.svelte'
+import ProcessEditor from './components/ProcessEditor.svelte'
 import ProcessesExtension from './components/ProcessesExtension.svelte'
-import ExecutonPresenter from './components/ExecutonPresenter.svelte'
-import ExecutonProgressPresenter from './components/ExecutonProgressPresenter.svelte'
+import ProcessesSettingSection from './components/ProcessesSection.svelte'
 import ProcessPresenter from './components/ProcessPresenter.svelte'
-import NestedContextSelector from './components/attributeEditors/NestedContextSelector.svelte'
-import RelatedContextSelector from './components/attributeEditors/RelatedContextSelector.svelte'
-import FunctionSelector from './components/attributeEditors/FunctionSelector.svelte'
-import Main from './components/Main.svelte'
 import RunProcessCardPopup from './components/RunProcessCardPopup.svelte'
-import { showDoneQuery } from './utils'
-import DateOffsetEditor from './components/contextEditors/DateOffsetEditor.svelte'
-import NumberOffsetEditor from './components/contextEditors/NumberOffsetEditor.svelte'
+import RunProcessPopup from './components/RunProcessPopup.svelte'
+import SubProcessEditor from './components/SubProcessEditor.svelte'
+import ToDoEditor from './components/ToDoEditor.svelte'
+import UpdateCardEditor from './components/UpdateCardEditor.svelte'
+
+import { continueExecution, showDoneQuery } from './utils'
+import { ProcessMiddleware } from './middleware'
 
 export default async (): Promise<Resources> => ({
+  actionImpl: {
+    ContinueExecution: continueExecution
+  },
   component: {
     UpdateCardEditor,
     SubProcessEditor,
@@ -55,9 +62,13 @@ export default async (): Promise<Resources> => ({
     Main,
     RunProcessCardPopup,
     DateOffsetEditor,
-    NumberOffsetEditor
+    NumberOffsetEditor,
+    ErrorPresenter,
+    RequestUserInput
   },
   function: {
-    ShowDoneQuery: showDoneQuery
+    ShowDoneQuery: showDoneQuery,
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    CreateMiddleware: ProcessMiddleware.create
   }
 })

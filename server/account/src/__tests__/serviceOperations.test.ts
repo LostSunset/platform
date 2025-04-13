@@ -82,13 +82,21 @@ describe('addSocialIdToPerson', () => {
       person: 'test-person' as PersonUuid,
       type: SocialIdType.GITHUB,
       value: 'test-value',
-      confirmed: true
+      confirmed: true,
+      displayValue: 'test-display-value'
     }
 
     const result = await addSocialIdToPerson(mockCtx, mockDb, mockBranding, mockToken, params)
 
     expect(result).toBe(newSocialId)
-    expect(addSocialIdSpy).toHaveBeenCalledWith(mockDb, params.person, params.type, params.value, params.confirmed)
+    expect(addSocialIdSpy).toHaveBeenCalledWith(
+      mockDb,
+      params.person,
+      params.type,
+      params.value,
+      params.confirmed,
+      params.displayValue
+    )
   })
 
   test('should allow admin to add social id', async () => {
@@ -102,13 +110,21 @@ describe('addSocialIdToPerson', () => {
       person: 'test-person' as PersonUuid,
       type: SocialIdType.GITHUB,
       value: 'test-value',
-      confirmed: false
+      confirmed: false,
+      displayValue: 'test-display-value'
     }
 
     const result = await addSocialIdToPerson(mockCtx, mockDb, mockBranding, mockToken, params)
 
     expect(result).toBe(newSocialId)
-    expect(addSocialIdSpy).toHaveBeenCalledWith(mockDb, params.person, params.type, params.value, params.confirmed)
+    expect(addSocialIdSpy).toHaveBeenCalledWith(
+      mockDb,
+      params.person,
+      params.type,
+      params.value,
+      params.confirmed,
+      params.displayValue
+    )
   })
 
   test('should throw error for unauthorized service', async () => {
@@ -889,15 +905,14 @@ describe('integration methods', () => {
       expect(mockDb.integrationSecret.findOne).toHaveBeenCalledWith(mockSecretKey)
     })
 
-    test('should throw error when secret not found', async () => {
+    test('should return null when integration secret not found', async () => {
       ;(decodeTokenVerbose as jest.Mock).mockReturnValue({
         extra: { service: 'github' }
       })
       ;(mockDb.integrationSecret.findOne as jest.Mock).mockResolvedValue(null)
 
-      await expect(getIntegrationSecret(mockCtx, mockDb, mockBranding, mockToken, mockSecretKey)).rejects.toThrow(
-        new PlatformError(new Status(Severity.ERROR, platform.status.IntegrationSecretNotFound, {}))
-      )
+      const result = await getIntegrationSecret(mockCtx, mockDb, mockBranding, mockToken, mockSecretKey)
+      expect(result).toBeNull()
     })
 
     test('should throw error for unauthorized service', async () => {

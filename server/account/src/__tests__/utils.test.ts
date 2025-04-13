@@ -15,6 +15,7 @@
 
 import {
   AccountRole,
+  type AccountUuid,
   Branding,
   MeasureContext,
   Person,
@@ -544,10 +545,17 @@ describe('account utils', () => {
       const result = await wrappedMethod(mockCtx, mockDb, mockBranding, request, 'token')
 
       expect(result).toEqual({ id: 'req1', result: mockResult })
-      expect(mockMethod).toHaveBeenCalledWith(mockCtx, mockDb, mockBranding, 'token', {
-        param1: 'value1',
-        param2: 'value2'
-      })
+      expect(mockMethod).toHaveBeenCalledWith(
+        mockCtx,
+        mockDb,
+        mockBranding,
+        'token',
+        {
+          param1: 'value1',
+          param2: 'value2'
+        },
+        {}
+      )
     })
 
     test('should handle token parameter', async () => {
@@ -559,7 +567,7 @@ describe('account utils', () => {
       const result = await wrappedMethod(mockCtx, mockDb, mockBranding, request, 'token')
 
       expect(result).toEqual({ id: 'req1', result: mockResult })
-      expect(mockMethod).toHaveBeenCalledWith(mockCtx, mockDb, mockBranding, 'token', { param1: 'value1' })
+      expect(mockMethod).toHaveBeenCalledWith(mockCtx, mockDb, mockBranding, 'token', { param1: 'value1' }, {})
     })
 
     test('should handle PlatformError', async () => {
@@ -608,6 +616,26 @@ describe('account utils', () => {
       const request = { id: 'req1', params: [] }
 
       await wrappedMethod(mockCtx, mockDb, mockBranding, request, 'token')
+    })
+
+    test('should handle timezone parameter', async () => {
+      const mockResult = { data: 'test' }
+      const mockMethod = jest.fn().mockResolvedValue(mockResult)
+      const wrappedMethod = wrap(mockMethod)
+      const mockTimezone = 'America/New_York'
+      const request = { id: 'req1', params: { param1: 'value1' }, headers: { 'X-Timezone': mockTimezone } }
+
+      const result = await wrappedMethod(mockCtx, mockDb, mockBranding, request, 'token')
+
+      expect(result).toEqual({ id: 'req1', result: mockResult })
+      expect(mockMethod).toHaveBeenCalledWith(
+        mockCtx,
+        mockDb,
+        mockBranding,
+        'token',
+        { param1: 'value1' },
+        { timezone: mockTimezone }
+      )
     })
   })
 
@@ -911,6 +939,7 @@ describe('account utils', () => {
 
         test('should confirm unverified email', async () => {
           const mockSocialId = {
+            _id: '1000000001' as PersonId,
             key: 'email:test@example.com',
             type: SocialIdType.EMAIL,
             value: email,
@@ -921,7 +950,7 @@ describe('account utils', () => {
           await confirmEmail(mockCtx, mockDb, account, email)
 
           expect(mockDb.socialId.updateOne).toHaveBeenCalledWith(
-            { key: mockSocialId.key },
+            { _id: mockSocialId._id },
             { verifiedOn: expect.any(Number) }
           )
         })
@@ -1451,10 +1480,10 @@ describe('account utils', () => {
     })
 
     test('should return account when found', async () => {
-      const mockAccount = { uuid: 'test-uuid' as PersonUuid }
+      const mockAccount = { uuid: 'test-uuid' as AccountUuid }
       ;(mockDb.account.findOne as jest.Mock).mockResolvedValue(mockAccount)
 
-      const result = await getAccount(mockDb, 'test-uuid' as PersonUuid)
+      const result = await getAccount(mockDb, 'test-uuid' as AccountUuid)
       expect(result).toEqual(mockAccount)
       expect(mockDb.account.findOne).toHaveBeenCalledWith({ uuid: 'test-uuid' })
     })
@@ -1462,7 +1491,7 @@ describe('account utils', () => {
     test('should return null when account not found', async () => {
       ;(mockDb.account.findOne as jest.Mock).mockResolvedValue(null)
 
-      const result = await getAccount(mockDb, 'nonexistent-uuid' as PersonUuid)
+      const result = await getAccount(mockDb, 'nonexistent-uuid' as AccountUuid)
       expect(result).toBeNull()
     })
   })
@@ -1699,6 +1728,7 @@ describe('account utils', () => {
 
     const mockDb = {
       socialId: {
+        find: jest.fn(() => []),
         findOne: jest.fn(),
         insertOne: jest.fn(),
         updateOne: jest.fn()

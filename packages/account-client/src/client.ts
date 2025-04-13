@@ -14,12 +14,12 @@
 //
 import {
   type AccountRole,
+  type AccountInfo,
   BackupStatus,
   Data,
   type Person,
   type PersonUuid,
   type PersonInfo,
-  SocialId,
   Version,
   type WorkspaceInfoWithStatus,
   type WorkspaceMemberInfo,
@@ -28,7 +28,8 @@ import {
   type WorkspaceUserOperation,
   type WorkspaceUuid,
   type PersonId,
-  type SocialIdType
+  type SocialIdType,
+  type AccountUuid
 } from '@hcengineering/core'
 import platform, { PlatformError, Severity, Status } from '@hcengineering/platform'
 import type {
@@ -42,8 +43,10 @@ import type {
   Integration,
   IntegrationKey,
   IntegrationSecret,
-  IntegrationSecretKey
+  IntegrationSecretKey,
+  SocialId
 } from './types'
+import { getClientTimezone } from './utils'
 
 /** @public */
 export interface AccountClient {
@@ -74,7 +77,7 @@ export interface AccountClient {
     navigateUrl?: string,
     expHours?: number
   ) => Promise<string>
-  leaveWorkspace: (account: string) => Promise<LoginInfo | null>
+  leaveWorkspace: (account: AccountUuid) => Promise<LoginInfo | null>
   changeUsername: (first: string, last: string) => Promise<void>
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>
   signUpJoin: (
@@ -105,6 +108,7 @@ export interface AccountClient {
   findPersonBySocialKey: (socialKey: string, requireAccount?: boolean) => Promise<PersonUuid | undefined>
   findPersonBySocialId: (socialId: PersonId, requireAccount?: boolean) => Promise<PersonUuid | undefined>
   findSocialIdBySocialKey: (socialKey: string) => Promise<PersonId | undefined>
+  findFullSocialIdBySocialKey: (socialKey: string) => Promise<SocialId | undefined>
   getMailboxOptions: () => Promise<MailboxOptions>
   createMailbox: (name: string, domain: string) => Promise<{ mailbox: string, socialId: PersonId }>
   getMailboxes: () => Promise<MailboxInfo[]>
@@ -139,26 +143,26 @@ export interface AccountClient {
     firstName: string,
     lastName: string
   ) => Promise<{ uuid: PersonUuid, socialId: PersonId }>
-  addSocialIdToPerson: (person: PersonUuid, type: SocialIdType, value: string, confirmed: boolean) => Promise<PersonId>
+  addSocialIdToPerson: (
+    person: PersonUuid,
+    type: SocialIdType,
+    value: string,
+    confirmed: boolean,
+    displayValue?: string
+  ) => Promise<PersonId>
+  updateSocialId: (personId: PersonId, displayValue: string) => Promise<PersonId>
+  exchangeGuestToken: (token: string) => Promise<string>
   createIntegration: (integration: Integration) => Promise<void>
   updateIntegration: (integration: Integration) => Promise<void>
   deleteIntegration: (integrationKey: IntegrationKey) => Promise<void>
   getIntegration: (integrationKey: IntegrationKey) => Promise<Integration | null>
-  listIntegrations: (filter: {
-    socialId?: PersonId
-    kind?: string
-    workspaceUuid?: WorkspaceUuid | null
-  }) => Promise<Integration[]>
+  listIntegrations: (filter: Partial<IntegrationKey>) => Promise<Integration[]>
   addIntegrationSecret: (integrationSecret: IntegrationSecret) => Promise<void>
   updateIntegrationSecret: (integrationSecret: IntegrationSecret) => Promise<void>
   deleteIntegrationSecret: (integrationSecretKey: IntegrationSecretKey) => Promise<void>
   getIntegrationSecret: (integrationSecretKey: IntegrationSecretKey) => Promise<IntegrationSecret | null>
-  listIntegrationsSecrets: (filter: {
-    socialId?: PersonId
-    kind?: string
-    workspaceUuid?: WorkspaceUuid | null
-    key?: string
-  }) => Promise<IntegrationSecret[]>
+  listIntegrationsSecrets: (filter: Partial<IntegrationSecretKey>) => Promise<IntegrationSecret[]>
+  getAccountInfo: (uuid: AccountUuid) => Promise<AccountInfo>
 
   setCookie: () => Promise<void>
   deleteCookie: () => Promise<void>
@@ -180,6 +184,7 @@ interface Request {
 
 class AccountClientImpl implements AccountClient {
   private readonly request: RequestInit
+  private readonly rpc: typeof this._rpc
 
   constructor (
     private readonly url: string,
@@ -202,22 +207,27 @@ class AccountClientImpl implements AccountClient {
       },
       ...(isBrowser ? { credentials: 'include' } : {})
     }
+    this.rpc = withRetryUntilTimeout(this._rpc.bind(this))
   }
 
   async getProviders (): Promise<string[]> {
-    return await retry(5, async () => {
+    return await withRetryUntilMaxAttempts(async () => {
       const response = await fetch(concatLink(this.url, '/providers'))
 
       return await response.json()
-    })
+    })()
   }
 
-  private async rpc<T>(request: Request): Promise<T> {
+  private async _rpc<T>(request: Request): Promise<T> {
+    const timezone = getClientTimezone()
+    const meta: Record<string, string> = timezone !== undefined ? { 'X-Timezone': timezone } : {}
     const response = await fetch(this.url, {
       ...this.request,
       headers: {
         ...this.request.headers,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        Connection: 'keep-alive',
+        ...meta
       },
       method: 'POST',
       body: JSON.stringify(request)
@@ -358,7 +368,7 @@ class AccountClientImpl implements AccountClient {
     return await this.rpc(request)
   }
 
-  async leaveWorkspace (account: string): Promise<LoginInfo | null> {
+  async leaveWorkspace (account: AccountUuid): Promise<LoginInfo | null> {
     const request = {
       method: 'leaveWorkspace' as const,
       params: { account }
@@ -631,6 +641,14 @@ class AccountClientImpl implements AccountClient {
     return await this.rpc(request)
   }
 
+  async findFullSocialIdBySocialKey (socialKey: string): Promise<SocialId | undefined> {
+    const request = {
+      method: 'findFullSocialIdBySocialKey' as const,
+      params: { socialKey }
+    }
+    return await this.rpc(request)
+  }
+
   async listWorkspaces (region?: string | null, mode: WorkspaceMode | null = null): Promise<WorkspaceInfoWithStatus[]> {
     const request = {
       method: 'listWorkspaces' as const,
@@ -694,17 +712,35 @@ class AccountClientImpl implements AccountClient {
     return await this.rpc(request)
   }
 
+  async exchangeGuestToken (token: string): Promise<string> {
+    const request = {
+      method: 'exchangeGuestToken' as const,
+      params: { token }
+    }
+
+    return await this.rpc(request)
+  }
+
   async addSocialIdToPerson (
     person: PersonUuid,
     type: SocialIdType,
     value: string,
-    confirmed: boolean
+    confirmed: boolean,
+    displayValue?: string
   ): Promise<PersonId> {
     const request = {
       method: 'addSocialIdToPerson' as const,
-      params: { person, type, value, confirmed }
+      params: { person, type, value, confirmed, displayValue }
     }
 
+    return await this.rpc(request)
+  }
+
+  async updateSocialId (personId: PersonId, displayValue: string): Promise<PersonId> {
+    const request = {
+      method: 'updateSocialId' as const,
+      params: { personId, displayValue }
+    }
     return await this.rpc(request)
   }
 
@@ -780,11 +816,7 @@ class AccountClientImpl implements AccountClient {
     return await this.rpc(request)
   }
 
-  async listIntegrations (filter: {
-    socialId?: PersonId
-    kind?: string
-    workspaceUuid?: WorkspaceUuid | null
-  }): Promise<Integration[]> {
+  async listIntegrations (filter: Partial<IntegrationKey>): Promise<Integration[]> {
     const request = {
       method: 'listIntegrations' as const,
       params: filter
@@ -829,15 +861,19 @@ class AccountClientImpl implements AccountClient {
     return await this.rpc(request)
   }
 
-  async listIntegrationsSecrets (filter: {
-    socialId?: PersonId
-    kind?: string
-    workspaceUuid?: WorkspaceUuid | null
-    key?: string
-  }): Promise<IntegrationSecret[]> {
+  async listIntegrationsSecrets (filter: Partial<IntegrationSecretKey>): Promise<IntegrationSecret[]> {
     const request = {
       method: 'listIntegrationsSecrets' as const,
       params: filter
+    }
+
+    return await this.rpc(request)
+  }
+
+  async getAccountInfo (uuid: AccountUuid): Promise<AccountInfo> {
+    const request = {
+      method: 'getAccountInfo' as const,
+      params: { accountId: uuid }
     }
 
     return await this.rpc(request)
@@ -868,18 +904,40 @@ class AccountClientImpl implements AccountClient {
   }
 }
 
-async function retry<T> (retries: number, op: () => Promise<T>, delay: number = 100): Promise<T> {
-  let error: any
-  while (retries > 0) {
-    retries--
-    try {
-      return await op()
-    } catch (err: any) {
-      error = err
-      if (retries !== 0) {
-        await new Promise((resolve) => setTimeout(resolve, delay))
+function withRetry<T, F extends (...args: any[]) => Promise<T>> (
+  f: F,
+  shouldFail: (err: any, attempt: number) => boolean,
+  intervalMs: number = 1000
+): F {
+  return async function (...params: any[]): Promise<T> {
+    let attempt = 0
+    while (true) {
+      try {
+        return await f(...params)
+      } catch (err: any) {
+        if (shouldFail(err, attempt)) {
+          throw err
+        }
+
+        attempt++
+        await new Promise<void>((resolve) => setTimeout(resolve, intervalMs))
       }
     }
-  }
-  throw error
+  } as F
+}
+
+const connectionErrorCodes = ['ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND']
+
+function withRetryUntilTimeout<T, F extends (...args: any[]) => Promise<T>> (f: F, timeoutMs: number = 5000): F {
+  const timeout = Date.now() + timeoutMs
+  const shouldFail = (err: any): boolean => !connectionErrorCodes.includes(err?.cause?.code) || timeout < Date.now()
+
+  return withRetry(f, shouldFail)
+}
+
+function withRetryUntilMaxAttempts<T, F extends (...args: any[]) => Promise<T>> (f: F, maxAttempts: number = 5): F {
+  const shouldFail = (err: any, attempt: number): boolean =>
+    !connectionErrorCodes.includes(err?.cause?.code) || attempt === maxAttempts
+
+  return withRetry(f, shouldFail)
 }

@@ -5,12 +5,20 @@ import {
   type ReccuringInstance,
   generateEventId
 } from '@hcengineering/calendar'
-import { type DocumentUpdate, type IdMap, type Timestamp, getCurrentAccount, toIdMap } from '@hcengineering/core'
-import { createQuery, getClient, onClient } from '@hcengineering/presentation'
+import {
+  type DocumentUpdate,
+  type IdMap,
+  SocialIdType,
+  type Timestamp,
+  getCurrentAccount,
+  toIdMap
+} from '@hcengineering/core'
+import { createQuery, getClient, getCurrentWorkspaceUrl, MessageBox, onClient } from '@hcengineering/presentation'
 import { closePopup, DAY, showPopup } from '@hcengineering/ui'
 import { writable } from 'svelte/store'
 import UpdateRecInstancePopup from './components/UpdateRecInstancePopup.svelte'
 import calendar from './plugin'
+import { getMetadata } from '@hcengineering/platform'
 
 export function saveUTC (date: Timestamp): Timestamp {
   const utcdate = new Date(date)
@@ -28,7 +36,7 @@ export function saveUTC (date: Timestamp): Timestamp {
 export function hidePrivateEvents (events: Event[], calendars: IdMap<Calendar>, allowMe: boolean = true): Event[] {
   const res: Event[] = []
   for (const event of events) {
-    if (getCurrentAccount().socialIds.includes(event.createdBy ?? event.modifiedBy) && allowMe) {
+    if (getCurrentAccount().socialIds.includes(event.user) && allowMe) {
       res.push(event)
     } else {
       if (event.visibility !== undefined) {
@@ -47,13 +55,13 @@ export function hidePrivateEvents (events: Event[], calendars: IdMap<Calendar>, 
 }
 
 export function isReadOnly (value: Event): boolean {
-  if (value.createdBy === undefined || !getCurrentAccount().socialIds.includes(value.createdBy)) return true
+  if (value.createdBy === undefined || !getCurrentAccount().socialIds.includes(value.user)) return true
   if (['owner', 'writer'].includes(value.access)) return false
   return true
 }
 
 export function isVisible (value: Event, calendars: IdMap<Calendar>): boolean {
-  if (value.createdBy !== undefined && getCurrentAccount().socialIds.includes(value.createdBy)) return true
+  if (value.createdBy !== undefined && getCurrentAccount().socialIds.includes(value.user)) return true
   if (value.visibility === 'freeBusy') {
     return false
   } else if (value.visibility === 'public') {
@@ -155,6 +163,7 @@ export async function updateReccuringInstance (
                   exdate: object.exdate,
                   rdate: object.rdate,
                   timeZone: object.timeZone,
+                  user: object.user,
                   ...ops
                 },
                 object._id
@@ -193,4 +202,27 @@ export async function updateReccuringInstance (
       })
     })
   }
+}
+
+export async function shareCalDavLink (): Promise<void> {
+  const calDavUrl = getMetadata(calendar.metadata.CalDavServerURL)
+  const ws = getCurrentWorkspaceUrl()
+  const account = getCurrentAccount()
+  const email = account.fullSocialIds.find((p) => p.type === SocialIdType.EMAIL)?.value
+  const link = `${calDavUrl}/caldav/principal/${email}/calendar/${ws}`
+  showPopup(
+    MessageBox,
+    {
+      label: calendar.string.CalDavShareLink,
+      message: calendar.string.CalDavSharedLinkMessage,
+      params: { link },
+      richMessage: true,
+      okLabel: calendar.string.CopyLink,
+      canSubmit: false,
+      action: async () => {
+        await navigator.clipboard.writeText(link)
+      }
+    },
+    undefined
+  )
 }

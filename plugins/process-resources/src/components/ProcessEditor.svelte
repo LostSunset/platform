@@ -13,10 +13,10 @@
 // limitations under the License.
 -->
 <script lang="ts">
-  import core, { Ref } from '@hcengineering/core'
+  import core, { generateId, Ref } from '@hcengineering/core'
   import { translate } from '@hcengineering/platform'
   import { createQuery, getClient, MessageBox } from '@hcengineering/presentation'
-  import { Process, State } from '@hcengineering/process'
+  import { Process, SelectedUserRequest, State } from '@hcengineering/process'
   import { settingsStore } from '@hcengineering/setting-resources'
   import {
     Button,
@@ -29,6 +29,7 @@
     IconDescription,
     navigate,
     NavItem,
+    ToggleWithLabel,
     Scroller,
     secondNavSeparators,
     Separator,
@@ -40,6 +41,8 @@
   import ArrowEnd from './icons/ArrowEnd.svelte'
   import ArrowStart from './icons/ArrowStart.svelte'
   import StateEditor from './StateEditor.svelte'
+  import TransitionEditor from './TransitionEditor.svelte'
+  import { getToDoEndAction } from '../utils'
 
   export let _id: Ref<Process>
   export let visibleSecondNav: boolean = true
@@ -77,6 +80,18 @@
     }
   }
 
+  async function saveRestriction (e: CustomEvent<boolean>): Promise<void> {
+    if (value !== undefined) {
+      await client.update(value, { parallelExecutionForbidden: e.detail })
+    }
+  }
+
+  async function saveAutoStart (e: CustomEvent<boolean>): Promise<void> {
+    if (value !== undefined) {
+      await client.update(value, { autoStart: e.detail })
+    }
+  }
+
   async function addState (): Promise<void> {
     if (value === undefined) return
     const prevState = states[states.length - 1]
@@ -90,12 +105,7 @@
     await client.update(value, { states: [...value.states, id] })
 
     if (prevState !== undefined) {
-      const endAction = {
-        methodId: process.method.CreateToDo,
-        params: {
-          title: prevState.title
-        }
-      }
+      const endAction = getToDoEndAction(prevState)
       prevState.endAction = endAction
       await client.update(prevState, { endAction })
       $settingsStore = { id: value._id, component: Aside, props: { process: value, value: prevState, index: -1 } }
@@ -160,6 +170,20 @@
             <EditBox bind:value={value.name} on:change={saveName} placeholder={process.string.Untitled} />
             <ButtonIcon icon={IconDelete} size="small" kind="secondary" on:click={handleDelete} />
           </div>
+          <div>
+            <ToggleWithLabel
+              on={value.parallelExecutionForbidden ?? false}
+              on:change={saveRestriction}
+              label={process.string.ParallelExecutionForbidden}
+            />
+          </div>
+          <div>
+            <ToggleWithLabel
+              on={value.autoStart ?? false}
+              on:change={saveAutoStart}
+              label={process.string.StartAutomatically}
+            />
+          </div>
           <div class="hulyComponent-content flex-col-center">
             <div class="flex-col-center">
               {#each sortedStates as state (state._id)}
@@ -169,6 +193,9 @@
                 <div class="arrow">
                   <ArrowStart size={'full'} />
                 </div>
+                {#if state.endAction !== undefined}
+                  <TransitionEditor {state} />
+                {/if}
                 <div class="arrow">
                   <ArrowEnd size={'full'} />
                 </div>

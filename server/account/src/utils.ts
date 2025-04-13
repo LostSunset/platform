@@ -29,7 +29,8 @@ import {
   isActiveMode,
   type PersonUuid,
   type PersonId,
-  type Person
+  type Person,
+  AccountUuid
 } from '@hcengineering/core'
 import { getMongoClient } from '@hcengineering/mongo' // TODO: get rid of this import later
 import platform, { getMetadata, PlatformError, Severity, Status, translate } from '@hcengineering/platform'
@@ -54,7 +55,8 @@ import {
   LoginInfo,
   WorkspaceLoginInfo,
   WorkspaceStatus,
-  AccountEventType
+  AccountEventType,
+  Meta
 } from './types'
 import { Analytics } from '@hcengineering/analytics'
 import { TokenError, decodeTokenVerbose, generateToken } from '@hcengineering/server-token'
@@ -118,7 +120,11 @@ export function wrap (
     request: any,
     token?: string
   ): Promise<any> {
-    return await accountMethod(ctx, db, branding, token, { ...request.params })
+    const meta =
+      request.headers !== undefined && request.headers['X-Timezone'] !== undefined
+        ? { timezone: request.headers['X-Timezone'] }
+        : {}
+    return await accountMethod(ctx, db, branding, token, { ...request.params }, meta)
       .then((result) => ({ id: request.id, result }))
       .catch((err) => {
         const status =
@@ -323,7 +329,7 @@ export async function setPassword (
   ctx: MeasureContext,
   db: AccountDB,
   branding: Branding | null,
-  personUuid: PersonUuid,
+  personUuid: AccountUuid,
   password: string
 ): Promise<void> {
   if (password == null || password === '') {
@@ -439,17 +445,15 @@ export async function createAccount (
   createdOn = Date.now()
 ): Promise<void> {
   // Create Huly social id and account
-  // Currently, it's always created along with the account but never confirmed.
-  // What's the actual use case for it?
   await db.socialId.insertOne({
     type: SocialIdType.HULY,
     value: personUuid,
     personUuid,
     ...(confirmed ? { verifiedOn: Date.now() } : {})
   })
-  await db.account.insertOne({ uuid: personUuid, automatic })
+  await db.account.insertOne({ uuid: personUuid as AccountUuid, automatic })
   await db.accountEvent.insertOne({
-    accountUuid: personUuid,
+    accountUuid: personUuid as AccountUuid,
     eventType: AccountEventType.ACCOUNT_CREATED,
     time: createdOn
   })
@@ -465,22 +469,22 @@ export async function signUpByEmail (
   lastName: string,
   confirmed = false,
   automatic = false
-): Promise<{ account: PersonUuid, socialId: PersonId }> {
+): Promise<{ account: AccountUuid, socialId: PersonId }> {
   const normalizedEmail = cleanEmail(email)
 
   const emailSocialId = await getEmailSocialId(db, normalizedEmail)
-  let account: PersonUuid
+  let account: AccountUuid
   let socialId: PersonId
 
   if (emailSocialId !== null) {
-    const existingAccount = await db.account.findOne({ uuid: emailSocialId.personUuid })
+    const existingAccount = await db.account.findOne({ uuid: emailSocialId.personUuid as AccountUuid })
 
     if (existingAccount !== null) {
       ctx.error('An account with the provided email already exists', { email })
       throw new PlatformError(new Status(Severity.ERROR, platform.status.AccountAlreadyExists, {}))
     }
 
-    account = emailSocialId.personUuid
+    account = emailSocialId.personUuid as AccountUuid
     socialId = emailSocialId._id
     // Person exists, but may have different name, need to update with what's been provided
     await db.person.updateOne({ uuid: account }, { firstName, lastName })
@@ -616,7 +620,7 @@ export async function updateWorkspaceRole (
   branding: Branding | null,
   token: string,
   params: {
-    targetAccount: PersonUuid
+    targetAccount: AccountUuid
     targetRole: AccountRole
   }
 ): Promise<void> {
@@ -894,15 +898,22 @@ export async function confirmEmail (
     )
   }
 
-  await db.socialId.updateOne({ key: emailSocialId.key }, { verifiedOn: Date.now() })
+  await db.socialId.updateOne({ _id: emailSocialId._id }, { verifiedOn: Date.now() })
   return emailSocialId._id
+}
+
+export async function confirmHulyIds (ctx: MeasureContext, db: AccountDB, account: AccountUuid): Promise<void> {
+  const hulySocialIds = await db.socialId.find({ personUuid: account, type: SocialIdType.HULY, verifiedOn: null })
+  for (const hulySocialId of hulySocialIds) {
+    await db.socialId.updateOne({ _id: hulySocialId._id }, { verifiedOn: Date.now() })
+  }
 }
 
 export async function useInvite (db: AccountDB, inviteId: string): Promise<void> {
   await db.invite.updateOne({ id: inviteId }, { $inc: { remainingUses: -1 } })
 }
 
-export async function getAccount (db: AccountDB, uuid: PersonUuid): Promise<Account | null> {
+export async function getAccount (db: AccountDB, uuid: AccountUuid): Promise<Account | null> {
   return await db.account.findOne({ uuid })
 }
 
@@ -1011,7 +1022,7 @@ export async function doJoinByInvite (
   db: AccountDB,
   branding: Branding | null,
   token: string,
-  account: PersonUuid,
+  account: AccountUuid,
   workspace: Workspace,
   invite: WorkspaceInvite
 ): Promise<WorkspaceLoginInfo> {
@@ -1074,7 +1085,7 @@ export async function loginOrSignUpWithProvider (
     throw new PlatformError(new Status(Severity.ERROR, platform.status.InternalServerError, {}))
   }
 
-  const account = await db.account.findOne({ uuid: personUuid })
+  const account = await db.account.findOne({ uuid: personUuid as AccountUuid })
 
   if (account == null) {
     if (signUpDisabled) {
@@ -1090,7 +1101,7 @@ export async function loginOrSignUpWithProvider (
   const confirmedSocialId = await db.socialId.findOne({ personUuid, verifiedOn: { $gt: 0 } })
 
   if (confirmedSocialId == null) {
-    await db.resetPassword(personUuid)
+    await db.resetPassword(personUuid as AccountUuid)
   }
 
   let socialIdId: PersonId | undefined
@@ -1115,8 +1126,10 @@ export async function loginOrSignUpWithProvider (
     await db.socialId.updateOne({ key: emailSocialId.key }, { verifiedOn: Date.now() })
   }
 
+  await confirmHulyIds(ctx, db, personUuid as AccountUuid)
+
   return {
-    account: personUuid,
+    account: personUuid as AccountUuid,
     socialId: socialIdId,
     name: getPersonName(person),
     token: generateToken(personUuid)
@@ -1326,7 +1339,8 @@ export async function addSocialId (
   personUuid: PersonUuid,
   type: SocialIdType,
   value: string,
-  confirmed: boolean
+  confirmed: boolean,
+  displayValue?: string
 ): Promise<PersonId> {
   const normalizedValue = normalizeValue(value ?? '')
 
@@ -1347,7 +1361,8 @@ export async function addSocialId (
   const newSocialId: Omit<SocialId, '_id' | 'key'> = {
     type,
     value: normalizedValue,
-    personUuid
+    personUuid,
+    displayValue
   }
 
   if (confirmed) {
@@ -1371,7 +1386,7 @@ export async function releaseSocialId (
 
 export async function getWorkspaceRole (
   db: AccountDB,
-  account: PersonUuid,
+  account: AccountUuid,
   workspace: WorkspaceUuid
 ): Promise<AccountRole | null> {
   if (account === systemAccountUuid) {
@@ -1383,4 +1398,25 @@ export async function getWorkspaceRole (
 
 export function generatePassword (len: number = 24): string {
   return randomBytes(len).toString('base64').slice(0, len)
+}
+
+export async function setTimezoneIfNotDefined (
+  ctx: MeasureContext,
+  db: AccountDB,
+  accountId: AccountUuid,
+  account: Account | null | undefined,
+  meta?: Meta
+): Promise<void> {
+  try {
+    if (meta?.timezone === undefined) return
+    const existingAccount = account ?? (await db.account.findOne({ uuid: accountId }))
+    if (existingAccount === undefined || existingAccount === null) {
+      ctx.warn('Failed to find account')
+      return
+    }
+    if (existingAccount.timezone != null) return
+    await db.account.updateOne({ uuid: accountId }, { timezone: meta.timezone })
+  } catch (err: any) {
+    ctx.error('Failed to set account timezone', err)
+  }
 }

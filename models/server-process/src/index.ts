@@ -19,8 +19,8 @@ import process from '@hcengineering/process'
 import serverCore from '@hcengineering/server-core'
 import serverProcess, {
   type ExecuteFunc,
-  type MethodImpl,
   type FuncImpl,
+  type MethodImpl,
   type TransformFunc
 } from '@hcengineering/server-process'
 
@@ -49,6 +49,10 @@ export function createModel (builder: Builder): void {
 
   builder.mixin(process.method.UpdateCard, process.class.Method, serverProcess.mixin.MethodImpl, {
     func: serverProcess.func.UpdateCard
+  })
+
+  builder.mixin(process.method.WaitSubProcess, process.class.Method, serverProcess.mixin.MethodImpl, {
+    func: serverProcess.func.WaitSubProcess
   })
 
   builder.mixin(process.function.FirstValue, process.class.ProcessFunction, serverProcess.mixin.FuncImpl, {
@@ -89,6 +93,16 @@ export function createModel (builder: Builder): void {
 
   builder.mixin(process.function.FirstWorkingDayAfter, process.class.ProcessFunction, serverProcess.mixin.FuncImpl, {
     func: serverProcess.transform.FirstWorkingDayAfter
+  })
+
+  builder.createDoc(serverCore.class.Trigger, core.space.Model, {
+    trigger: serverProcess.trigger.OnExecutionContinue,
+    txMatch: {
+      _class: core.class.TxUpdateDoc,
+      objectClass: process.class.Execution,
+      'operations.error': null
+    },
+    isAsync: true
   })
 
   builder.createDoc(serverCore.class.Trigger, core.space.Model, {

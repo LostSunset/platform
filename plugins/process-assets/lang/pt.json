@@ -42,6 +42,25 @@
     "Offset": "Deslocar",
     "FirstWorkingDayAfter": "Primeiro Dia de Trabalho Após",
     "FallbackValueError": "Mostrar erro se vazio",
-    "Required": "Obrigatório"
+    "Required": "Obrigatório",
+    "ParallelExecutionForbidden": "Execução Paralela Proibida",
+    "StartAutomatically": "Iniciar automaticamente",
+    "Error": "Erro",
+    "Continue": "Continuar",
+    "RequestFromUser": "Solicitar do usuário",
+    "EnterValue": "Insira valor",
+    "OnToDoClose": "Ao fechar Tarefa",
+    "OnSubProcessesDone": "Ao concluir processos sub"
+  },
+  "error": {
+    "MethodNotFound": "Método não encontrado: {methodId}",
+    "AttributeNotExists": "Atributo não existe: {key}",
+    "RelatedObjectNotFound": "Objeto relacionado não encontrado: {attr}",
+    "RelationNotExists": "Relação não existe: {association}",
+    "EmptyAttributeContextValue": "Valor de atributo vazio: {attr}",
+    "UserRequestedValueNotProvided": "Valor solicitado pelo usuário não fornecido: {attr}",
+    "ObjectNotFound": "Objeto não encontrado: {_id}",
+    "EmptyRelatedObjectValue": "Valor de objeto relacionado vazio: {parent} {attr}",
+    "InternalServerError": "Erro interno do servidor, contate o suporte, id de erro: {errorId}"
   }
 }
