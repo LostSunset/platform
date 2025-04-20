@@ -91,7 +91,7 @@ export async function buildDmName (client: Client, accounts: AccountUuid[]): Pro
   let myName = ''
 
   for (const acc of accounts) {
-    const employee = employeeByAccount.get(acc)
+    const employee = employeeByAccount.get(acc) ?? (await client.findOne(contact.class.Person, { personUuid: acc }))
 
     if (employee === undefined) {
       continue
@@ -164,7 +164,7 @@ export async function getDmPersons (client: Client, space: Space): Promise<Perso
   }
   const myAcc = getCurrentAccount().uuid
 
-  const accounts = space.members.length > 0 ? space.members.filter((m) => m !== myAcc) : [myAcc]
+  const accounts = space.members.length > 1 ? space.members.filter((m) => m !== myAcc) : [myAcc]
 
   return await client.findAll(contact.class.Person, {
     personUuid: { $in: accounts }

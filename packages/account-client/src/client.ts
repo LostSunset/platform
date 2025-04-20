@@ -13,38 +13,39 @@
 // limitations under the License.
 //
 import {
-  type AccountRole,
   type AccountInfo,
+  type AccountRole,
+  type AccountUuid,
   BackupStatus,
+  concatLink,
   Data,
   type Person,
-  type PersonUuid,
+  type PersonId,
   type PersonInfo,
+  type PersonUuid,
+  type SocialIdType,
   Version,
   type WorkspaceInfoWithStatus,
   type WorkspaceMemberInfo,
   WorkspaceMode,
-  concatLink,
   type WorkspaceUserOperation,
-  type WorkspaceUuid,
-  type PersonId,
-  type SocialIdType,
-  type AccountUuid
+  type WorkspaceUuid
 } from '@hcengineering/core'
 import platform, { PlatformError, Severity, Status } from '@hcengineering/platform'
 import type {
-  LoginInfo,
-  MailboxOptions,
-  OtpInfo,
-  WorkspaceLoginInfo,
-  RegionInfo,
-  WorkspaceOperation,
-  MailboxInfo,
   Integration,
   IntegrationKey,
   IntegrationSecret,
   IntegrationSecretKey,
-  SocialId
+  LoginInfo,
+  LoginInfoWithWorkspaces,
+  MailboxInfo,
+  MailboxOptions,
+  OtpInfo,
+  RegionInfo,
+  SocialId,
+  WorkspaceLoginInfo,
+  WorkspaceOperation
 } from './types'
 import { getClientTimezone } from './utils'
 
@@ -63,6 +64,7 @@ export interface AccountClient {
   validateOtp: (email: string, code: string) => Promise<LoginInfo>
   loginOtp: (email: string) => Promise<OtpInfo>
   getLoginInfoByToken: () => Promise<LoginInfo | WorkspaceLoginInfo>
+  getLoginWithWorkspaceInfo: () => Promise<LoginInfoWithWorkspaces>
   restorePassword: (password: string) => Promise<LoginInfo>
   confirm: () => Promise<LoginInfo>
   requestPasswordReset: (email: string) => Promise<void>
@@ -152,6 +154,7 @@ export interface AccountClient {
   ) => Promise<PersonId>
   updateSocialId: (personId: PersonId, displayValue: string) => Promise<PersonId>
   exchangeGuestToken: (token: string) => Promise<string>
+  releaseSocialId: (personUuid: PersonUuid, type: SocialIdType, value: string) => Promise<void>
   createIntegration: (integration: Integration) => Promise<void>
   updateIntegration: (integration: Integration) => Promise<void>
   deleteIntegration: (integrationKey: IntegrationKey) => Promise<void>
@@ -169,12 +172,12 @@ export interface AccountClient {
 }
 
 /** @public */
-export function getClient (accountsUrl?: string, token?: string): AccountClient {
+export function getClient (accountsUrl?: string, token?: string, retryTimeoutMs?: number): AccountClient {
   if (accountsUrl === undefined) {
     throw new Error('Accounts url not specified')
   }
 
-  return new AccountClientImpl(accountsUrl, token)
+  return new AccountClientImpl(accountsUrl, token, retryTimeoutMs)
 }
 
 interface Request {
@@ -188,7 +191,8 @@ class AccountClientImpl implements AccountClient {
 
   constructor (
     private readonly url: string,
-    private readonly token?: string
+    private readonly token?: string,
+    retryTimeoutMs?: number
   ) {
     if (url === '') {
       throw new Error('Accounts url not specified')
@@ -207,7 +211,7 @@ class AccountClientImpl implements AccountClient {
       },
       ...(isBrowser ? { credentials: 'include' } : {})
     }
-    this.rpc = withRetryUntilTimeout(this._rpc.bind(this))
+    this.rpc = withRetryUntilTimeout(this._rpc.bind(this), retryTimeoutMs ?? 5000)
   }
 
   async getProviders (): Promise<string[]> {
@@ -220,7 +224,7 @@ class AccountClientImpl implements AccountClient {
 
   private async _rpc<T>(request: Request): Promise<T> {
     const timezone = getClientTimezone()
-    const meta: Record<string, string> = timezone !== undefined ? { 'X-Timezone': timezone } : {}
+    const meta: Record<string, string> = timezone !== undefined ? { 'x-timezone': timezone } : {}
     const response = await fetch(this.url, {
       ...this.request,
       headers: {
@@ -300,6 +304,15 @@ class AccountClientImpl implements AccountClient {
   async getLoginInfoByToken (): Promise<LoginInfo | WorkspaceLoginInfo> {
     const request = {
       method: 'getLoginInfoByToken' as const,
+      params: {}
+    }
+
+    return await this.rpc(request)
+  }
+
+  async getLoginWithWorkspaceInfo (): Promise<LoginInfoWithWorkspaces> {
+    const request = {
+      method: 'getLoginWithWorkspaceInfo' as const,
       params: {}
     }
 
@@ -780,6 +793,15 @@ class AccountClientImpl implements AccountClient {
     await this.rpc(request)
   }
 
+  async releaseSocialId (personUuid: PersonUuid, type: SocialIdType, value: string): Promise<void> {
+    const request = {
+      method: 'releaseSocialId' as const,
+      params: { personUuid, type, value }
+    }
+
+    await this.rpc(request)
+  }
+
   async createIntegration (integration: Integration): Promise<void> {
     const request = {
       method: 'createIntegration' as const,
@@ -907,7 +929,7 @@ class AccountClientImpl implements AccountClient {
 function withRetry<T, F extends (...args: any[]) => Promise<T>> (
   f: F,
   shouldFail: (err: any, attempt: number) => boolean,
-  intervalMs: number = 1000
+  intervalMs: number = 25
 ): F {
   return async function (...params: any[]): Promise<T> {
     let attempt = 0
@@ -921,6 +943,9 @@ function withRetry<T, F extends (...args: any[]) => Promise<T>> (
 
         attempt++
         await new Promise<void>((resolve) => setTimeout(resolve, intervalMs))
+        if (intervalMs < 1000) {
+          intervalMs += 100
+        }
       }
     }
   } as F

@@ -1,4 +1,4 @@
-// Copyright © 2022 Hardcore Engineering Inc.
+// Copyright © 2022-2025 Hardcore Engineering Inc.
 //
 // Licensed under the Eclipse Public License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License. You may
@@ -12,7 +12,18 @@
 // limitations under the License.
 
 import { Contact, Employee } from '@hcengineering/contact'
-import type { AttachedDoc, Class, Doc, Markup, Mixin, PersonId, Ref, SystemSpace, Timestamp } from '@hcengineering/core'
+import type {
+  AttachedDoc,
+  Class,
+  Client,
+  Doc,
+  Markup,
+  Mixin,
+  PersonId,
+  Ref,
+  SystemSpace,
+  Timestamp
+} from '@hcengineering/core'
 import { NotificationType } from '@hcengineering/notification'
 import type { Asset, IntlString, Metadata, Plugin, Resource } from '@hcengineering/platform'
 import { plugin } from '@hcengineering/platform'
@@ -240,8 +251,16 @@ const calendarPlugin = plugin(calendarId, {
     Day: '' as IntlString,
     Week: '' as IntlString,
     Month: '' as IntlString,
-    CalDavShareLink: '' as IntlString,
-    CalDavSharedLinkMessage: '' as IntlString
+    CalDavAccess: '' as IntlString,
+    CalDavAccessPrompt: '' as IntlString,
+    CalDavAccessEnable: '' as IntlString,
+    CalDavAccessServer: '' as IntlString,
+    CalDavAccessAccount: '' as IntlString,
+    CalDavAccessPassword: '' as IntlString,
+    CalDavAccessPasswordWarning: '' as IntlString,
+    MeetingScheduledNotification: '' as IntlString,
+    MeetingRescheduledNotification: '' as IntlString,
+    MeetingCanceledNotification: '' as IntlString
   },
   handler: {
     DisconnectHandler: '' as Handler
@@ -262,7 +281,8 @@ const calendarPlugin = plugin(calendarId, {
     NoAttached: '' as Ref<Event>
   },
   function: {
-    ShareCalDavLink: '' as Resource<() => Promise<void>>
+    ConfigureCalDavAccess: '' as Resource<() => Promise<void>>,
+    EventTitleProvider: '' as Resource<(client: Client, ref: Ref<Doc>, doc?: Doc) => Promise<string>>
   }
 })
 
