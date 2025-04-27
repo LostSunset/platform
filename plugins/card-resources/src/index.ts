@@ -47,8 +47,13 @@ import CardArrayEditor from './components/CardArrayEditor.svelte'
 import NewCardHeader from './components/navigator/NewCardHeader.svelte'
 import SpacePresenter from './components/navigator/SpacePresenter.svelte'
 import LabelsPresenter from './components/LabelsPresenter.svelte'
+import RolesSection from './components/settings/RolesSection.svelte'
+import EditRole from './components/settings/EditRole.svelte'
 
 export { default as CardSelector } from './components/CardSelector.svelte'
+export { default as Navigator } from './components/navigator-next/Navigator.svelte'
+
+export * from './types'
 
 export default async (): Promise<Resources> => ({
   component: {
@@ -76,7 +81,9 @@ export default async (): Promise<Resources> => ({
     CardArrayEditor,
     NewCardHeader,
     SpacePresenter,
-    LabelsPresenter
+    LabelsPresenter,
+    RolesSection,
+    EditRole
   },
   completion: {
     CardQuery: queryCard

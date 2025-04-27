@@ -40,14 +40,16 @@
   "dependencies": {
     "@hcengineering/analytics": "^0.6.0",
     "@hcengineering/card": "^0.6.0",
+    "@hcengineering/card-resources": "^0.6.0",
     "@hcengineering/chat": "^0.6.0",
-    "@hcengineering/communication-types": "0.1.170",
+    "@hcengineering/communication-types": "0.1.172",
     "@hcengineering/contact": "^0.6.24",
     "@hcengineering/contact-resources": "^0.6.0",
     "@hcengineering/core": "^0.6.32",
     "@hcengineering/platform": "^0.6.11",
     "@hcengineering/presence-resources": "^0.6.0",
     "@hcengineering/presentation": "^0.6.3",
+    "@hcengineering/rank": "^0.6.4",
     "@hcengineering/text": "^0.6.5",
     "@hcengineering/text-markdown": "^0.6.0",
     "@hcengineering/ui": "^0.6.15",
@@ -56,7 +58,6 @@
     "@hcengineering/view-resources": "^0.6.0",
     "@hcengineering/workbench": "^0.6.16",
     "@hcengineering/workbench-resources": "^0.6.1",
-    "@hcengineering/rank": "^0.6.4",
     "fast-equals": "^5.2.2",
     "svelte": "^4.2.19"
   }

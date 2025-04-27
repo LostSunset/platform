@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 import calendar, { Calendar, Event, ExternalCalendar } from '@hcengineering/calendar'
-import contactPlugin, { Employee, Person, SocialIdentity } from '@hcengineering/contact'
+import contactPlugin, { Employee, Person } from '@hcengineering/contact'
 import core, {
   Class,
   concatLink,
@@ -114,25 +114,6 @@ export async function OnEmployee (txes: Tx[], control: TriggerControl): Promise<
     result.push(...(await createCalendar(control, employee.personUuid, socialId, socialId)))
   }
 
-  return result
-}
-
-export async function OnSocialIdentityCreate (txes: Tx[], control: TriggerControl): Promise<Tx[]> {
-  const result: Tx[] = []
-  for (const tx of txes) {
-    const ctx = tx as TxCUD<SocialIdentity>
-    if (ctx._class !== core.class.TxCreateDoc) continue
-
-    const socialId = TxProcessor.createDoc2Doc(ctx as TxCreateDoc<SocialIdentity>)
-    const employee = (
-      await control.findAll(control.ctx, contactPlugin.mixin.Employee, { _id: socialId.attachedTo as Ref<Employee> })
-    )[0]
-    if (employee === undefined || !employee.active || employee.personUuid === undefined) continue
-
-    if (await checkCalendarsExist(control, employee._id)) continue
-
-    result.push(...(await createCalendar(control, employee.personUuid, socialId._id, socialId.value)))
-  }
   return result
 }
 
@@ -364,19 +345,16 @@ async function putEventToQueue (
   modifiedBy: PersonId,
   changes?: Record<string, any>
 ): Promise<void> {
-  if (control.queue === undefined) {
-    return
-  }
-  const producer = control.queue.createProducer<EventCUDMessage>(
+  if (control.queue === undefined) return
+  const producer = control.queue.getProducer<EventCUDMessage>(
     control.ctx.newChild('queue', {}),
     QueueTopic.CalendarEventCUD
   )
+
   try {
     await producer.send(control.workspace.uuid, [{ action, event, modifiedBy, changes }])
   } catch (err) {
     control.ctx.error('Could not queue calendar event', { err, action, event })
-  } finally {
-    await producer.close()
   }
 }
 
@@ -448,7 +426,6 @@ export default async () => ({
     FindReminders
   },
   trigger: {
-    OnSocialIdentityCreate,
     OnEmployee,
     OnEvent
   }
