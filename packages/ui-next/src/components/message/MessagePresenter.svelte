@@ -14,39 +14,35 @@
 -->
 
 <script lang="ts">
-  import { formatName, getPersonBySocialId, Person } from '@hcengineering/contact'
-  import { createEventDispatcher } from 'svelte'
+  import { getPersonBySocialId, Person } from '@hcengineering/contact'
   import { getClient } from '@hcengineering/presentation'
   import cardPlugin, { Card } from '@hcengineering/card'
   import { getCurrentAccount, Ref } from '@hcengineering/core'
   import { EmojiPopup, getEventPositionElement, showPopup, Action as MenuAction } from '@hcengineering/ui'
-  import { PersonPreviewProvider, personByPersonIdStore } from '@hcengineering/contact-resources'
+  import { personByPersonIdStore } from '@hcengineering/contact-resources'
   import type { SocialID } from '@hcengineering/communication-types'
   import { AttachmentPreview } from '@hcengineering/attachment-resources'
   import { Message, MessageType } from '@hcengineering/communication-types'
   import { openDoc } from '@hcengineering/view-resources'
 
-  import MessageContentViewer from './MessageContentViewer.svelte'
-  import { AvatarSize } from '../../types'
-  import Avatar from '../Avatar.svelte'
   import ReactionsList from '../ReactionsList.svelte'
-  import MessageInput from './MessageInput.svelte'
-  import Label from '../Label.svelte'
   import Menu from '../Menu.svelte'
   import uiNext from '../../plugin'
   import MessageReplies from './MessageReplies.svelte'
-  import { toMarkup, toggleReaction } from '../../utils'
+  import { toggleReaction, replyToThread } from '../../utils'
   import MessageActionsPanel from './MessageActionsPanel.svelte'
   import IconEmoji from '../icons/IconEmoji.svelte'
   import IconMessageMultiple from '../icons/IconMessageMultiple.svelte'
   import IconPen from '../icons/IconPen.svelte'
+  import MessageBody from './MessageBody.svelte'
+  import OneRowMessageBody from './OneRowMessageBody.svelte'
 
   export let card: Card
   export let message: Message
   export let editable: boolean = true
   export let replies: boolean = true
+  export let padding: string | undefined = undefined
 
-  const dispatch = createEventDispatcher()
   const client = getClient()
   const me = getCurrentAccount()
 
@@ -58,8 +54,13 @@
   function canEdit (): boolean {
     if (!editable) return false
     if (message.type !== MessageType.Message) return false
+    if (message.thread != null) return false
 
     return me.socialIds.includes(message.creator)
+  }
+
+  function canReply (): boolean {
+    return message.type === MessageType.Message
   }
 
   async function updateAuthor (socialId: SocialID): Promise<void> {
@@ -70,20 +71,9 @@
     }
   }
 
-  function formatDate (date: Date): string {
-    return date.toLocaleTimeString('default', {
-      hour: 'numeric',
-      minute: 'numeric'
-    })
-  }
-
   async function handleEdit (): Promise<void> {
     if (!canEdit()) return
     isEditing = true
-  }
-
-  function handleCancelEdit (): void {
-    isEditing = false
   }
 
   async function handleReaction (event: CustomEvent<string>): Promise<void> {
@@ -125,8 +115,10 @@
       event.preventDefault()
       event.stopPropagation()
 
-      const actions: MenuAction[] = [
-        {
+      const actions: MenuAction[] = []
+
+      if (message.thread == null) {
+        actions.push({
           label: uiNext.string.Emoji,
           icon: IconEmoji,
           action: async (): Promise<void> => {
@@ -145,18 +137,21 @@
               () => {}
             )
           }
-        },
-        {
+        })
+      }
+
+      if (canReply()) {
+        actions.push({
           label: uiNext.string.Reply,
           icon: IconMessageMultiple,
           action: async (): Promise<void> => {
-            dispatch('reply', message)
+            await replyToThread(message, card)
           }
-        }
-      ]
+        })
+      }
 
       if (canEdit()) {
-        actions.unshift({
+        actions.push({
           label: uiNext.string.Edit,
           icon: IconPen,
           action: handleEdit
@@ -169,7 +164,8 @@
 
   let isActionsOpened = false
 
-  async function handleReply () {
+  async function handleReply (): Promise<void> {
+    if (!canReply()) return
     const t = message.thread
     if (t === undefined) return
     const _id = t.thread
@@ -178,6 +174,8 @@
     if (c === undefined) return
     await openDoc(client.getHierarchy(), c)
   }
+
+  $: isThread = message.thread != null
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -188,75 +186,50 @@
   on:contextmenu={editable && !isEditing ? handleContextMenu : undefined}
   class:active={isActionsOpened && !isEditing}
   class:noHover={!editable}
+  style:padding
 >
   {#if !isEditing && editable}
     <div class="message__actions" class:opened={isActionsOpened}>
       <MessageActionsPanel
         {message}
         editable={canEdit()}
+        canReply={canReply()}
+        canReact={!isThread}
         bind:isOpened={isActionsOpened}
         on:edit={handleEdit}
         on:reply={() => {
-          dispatch('reply', message)
+          void replyToThread(message, card)
         }}
       />
     </div>
   {/if}
-  <div class="message__body">
-    <div class="message__avatar">
-      <PersonPreviewProvider value={author}>
-        <Avatar name={author?.name} avatar={author} size={AvatarSize.Small} />
-      </PersonPreviewProvider>
-    </div>
-    <div class="message__content">
-      <div class="message__header">
-        <PersonPreviewProvider value={author}>
-          <div class="message__username">
-            {formatName(author?.name ?? '')}
-          </div>
-        </PersonPreviewProvider>
-        <div class="message__date">
-          {formatDate(message.created)}
-        </div>
-        {#if message.edited}
-          <div class="message__edited-marker">
-            <Label label={uiNext.string.Edited} />
-          </div>
-        {/if}
-      </div>
-      {#if !isEditing}
-        <div class="message__text">
-          <MessageContentViewer {message} {card} />
-        </div>
-      {:else}
-        <MessageInput
-          cardId={card._id}
-          cardType={card._class}
-          {message}
-          content={toMarkup(message.content)}
-          onCancel={handleCancelEdit}
-          on:edited={() => {
-            isEditing = false
-          }}
-        />
-      {/if}
-    </div>
-  </div>
-  {#if message.files.length > 0}
+
+  {#if isThread || message.type === MessageType.Activity}
+    <OneRowMessageBody {message} {card} {author} />
+  {:else}
+    <MessageBody {message} {card} {author} bind:isEditing />
+  {/if}
+
+  {#if !isThread && message.files.length > 0}
     <div class="message__files">
       {#each message.files as file (file.blobId)}
         <AttachmentPreview value={{ file: file.blobId, type: file.type, name: file.filename }} />
       {/each}
     </div>
   {/if}
-  {#if message.reactions.length > 0}
+  {#if !isThread && message.reactions.length > 0}
     <div class="message__reactions">
       <ReactionsList reactions={message.reactions} on:click={handleReaction} />
     </div>
   {/if}
   {#if replies && message.thread && message.thread.repliesCount > 0}
     <div class="message__replies overflow-label">
-      <MessageReplies count={message.thread.repliesCount} lastReply={message.thread.lastReply} on:click={handleReply} />
+      <MessageReplies
+        threadId={message.thread.thread}
+        count={message.thread.repliesCount}
+        lastReply={message.thread.lastReply}
+        on:click={handleReply}
+      />
     </div>
   {/if}
 </div>
@@ -281,72 +254,6 @@
     &.active {
       background: var(--next-message-hover-color-background);
     }
-  }
-
-  .message__body {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-    align-self: stretch;
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  .message__avatar {
-    display: flex;
-    width: 2rem;
-    flex-direction: column;
-    align-items: center;
-    align-self: stretch;
-  }
-
-  .message__content {
-    display: flex;
-    padding-bottom: 0.75rem;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.375rem;
-    flex: 1 0 0;
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  .message__header {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-  }
-
-  .message__username {
-    color: var(--next-text-color-primary);
-    font-size: 0.875rem;
-    font-weight: 500;
-  }
-
-  .message__date {
-    color: var(--next-text-color-tertiary);
-    font-size: 0.75rem;
-    font-weight: 400;
-  }
-
-  .message__edited-marker {
-    text-transform: lowercase;
-    color: var(--next-text-color-tertiary);
-    font-size: 0.625rem;
-    font-weight: 400;
-  }
-
-  .message__text {
-    color: var(--next-text-color-primary);
-    font-size: 0.875rem;
-    font-style: normal;
-    font-weight: 400;
-
-    display: flex;
-    overflow: hidden;
-    min-width: 0;
-    max-width: 100%;
-    user-select: text;
   }
 
   .message__reactions {
