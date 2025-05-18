@@ -30,14 +30,15 @@
   "dependencies": {
     "@hcengineering/activity": "^0.6.0",
     "@hcengineering/card": "^0.6.0",
+    "@hcengineering/chat": "^0.6.0",
     "@hcengineering/chunter": "^0.6.20",
     "@hcengineering/model": "^0.6.11",
+    "@hcengineering/model-card": "^0.6.0",
     "@hcengineering/model-core": "^0.6.0",
     "@hcengineering/core": "^0.6.32",
     "@hcengineering/platform": "^0.6.11",
     "@hcengineering/model-view": "^0.6.0",
     "@hcengineering/mail": "^0.6.0",
-    "@hcengineering/mail-resources": "^0.6.0",
     "@hcengineering/setting": "^0.6.17",
     "@hcengineering/ui": "^0.6.15"
   }

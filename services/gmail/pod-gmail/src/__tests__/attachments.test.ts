@@ -12,9 +12,10 @@ import {
 import { StorageAdapter } from '@hcengineering/server-core'
 import { gmail_v1 } from 'googleapis'
 import { AttachmentHandler } from '../message/attachments'
-import type { AttachedFile } from '../types'
+import type { Attachment as AttachedFile } from '@hcengineering/mail-common'
 import attachment, { Attachment } from '@hcengineering/attachment'
 import { decode64, encode64 } from '../base64'
+import { WorkspaceLoginInfo } from '@hcengineering/account-client'
 
 jest.mock('../config')
 
@@ -41,7 +42,11 @@ describe('AttachmentHandler', () => {
     warn: jest.fn(),
     end: jest.fn()
   }
-  const mockWorkspaceId = 'test-workspace' as WorkspaceUuid
+  const mockWorkspaceLoginInfo: WorkspaceLoginInfo = {
+    endpoint: 'wss://test-endpoint.com',
+    workspace: 'test-workspace' as WorkspaceUuid,
+    token: 'test-token'
+  } as any
   const mockStorageAdapter = {
     put: jest.fn(),
     read: jest.fn()
@@ -77,15 +82,22 @@ describe('AttachmentHandler', () => {
   let attachmentHandler: AttachmentHandler
 
   beforeEach(() => {
-    attachmentHandler = new AttachmentHandler(mockCtx, mockWorkspaceId, mockStorageAdapter, mockGmail, mockClient)
+    attachmentHandler = new AttachmentHandler(
+      mockCtx,
+      mockWorkspaceLoginInfo,
+      mockStorageAdapter,
+      mockGmail,
+      mockClient
+    )
   })
 
   describe('addAttachement', () => {
     it('should not add attachment if it already exists', async () => {
       const file: AttachedFile = {
-        file: 'test-file',
+        id: 'test-id',
+        data: Buffer.from('test-file'),
         name: 'test.txt',
-        type: 'text/plain',
+        contentType: 'text/plain',
         size: 100,
         lastModified: Date.now()
       }
@@ -94,7 +106,7 @@ describe('AttachmentHandler', () => {
         {
           ...getBaseAttachment(),
           name: 'test.txt',
-          lastModified: file.lastModified
+          lastModified: file.lastModified ?? Date.now()
         }
       ]
 
@@ -106,9 +118,10 @@ describe('AttachmentHandler', () => {
 
     it('should add new attachment', async () => {
       const file: AttachedFile = {
-        file: 'test-file',
+        id: 'test-id',
+        data: Buffer.from('test-file'),
         name: 'test.txt',
-        type: 'text/plain',
+        contentType: 'text/plain',
         size: 100,
         lastModified: Date.now()
       }
@@ -154,9 +167,10 @@ describe('AttachmentHandler', () => {
 
       expect(result).toEqual([
         {
-          file: 'test-data',
+          id: expect.any(String),
+          data: expect.any(Buffer),
           name: 'test.txt',
-          type: 'text/plain',
+          contentType: 'text/plain',
           size: 100,
           lastModified: expect.any(Number)
         }
@@ -177,9 +191,10 @@ describe('AttachmentHandler', () => {
 
       expect(result).toEqual([
         {
-          file: 'test-data',
+          id: expect.any(String),
+          data: expect.any(Buffer),
           name: 'test.txt',
-          type: 'text/plain',
+          contentType: 'text/plain',
           size: 100,
           lastModified: expect.any(Number)
         }

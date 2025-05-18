@@ -32,6 +32,8 @@ import workbench, { type Application } from '@hcengineering/workbench'
 
 export interface ReferenceExtensionOptions extends ReferenceOptions {
   suggestion: Omit<SuggestionOptions, 'editor'>
+  docClass?: Ref<Class<Doc>>
+  multipleMentions?: boolean
   showDoc?: (event: MouseEvent, _id: string, _class: string) => void
 }
 
@@ -96,10 +98,12 @@ export const ReferenceExtension = ReferenceNode.extend<ReferenceExtensionOptions
         this.options.HTMLAttributes,
         HTMLAttributes
       )
+      const withoutDoc = [contact.mention.Everyone, contact.mention.Here].includes(node.attrs.id)
       const id = node.attrs.id
       const objectclass: Ref<Class<Doc>> = node.attrs.objectclass
 
       root.addEventListener('click', (event) => {
+        if (withoutDoc) return
         if (event.button !== 0) return
         if (broken) {
           showPopup(MessageBox, {
@@ -164,7 +168,7 @@ export const ReferenceExtension = ReferenceNode.extend<ReferenceExtensionOptions
       const titleSpan = root.appendChild(document.createElement('span'))
       renderLabel({ id, objectclass, label: node.attrs.label })
 
-      if (id !== undefined && objectclass !== undefined) {
+      if (id !== undefined && objectclass !== undefined && !withoutDoc) {
         query.query(objectclass, { _id: id }, async (result) => {
           const obj = result[0]
           broken = obj === undefined
@@ -180,6 +184,8 @@ export const ReferenceExtension = ReferenceNode.extend<ReferenceExtensionOptions
             renderLabel({ id, objectclass, label })
           }
         })
+      } else if (withoutDoc) {
+        query.unsubscribe()
       }
 
       return {
@@ -228,6 +234,8 @@ export const ReferenceExtension = ReferenceNode.extend<ReferenceExtensionOptions
     return [
       Suggestion({
         editor: this.editor,
+        docClass: this.options.docClass,
+        multipleMentions: this.options.multipleMentions,
         ...this.options.suggestion
       }),
       // ReferenceClickHandler(this.options),
@@ -400,7 +408,12 @@ export async function getReferenceLabel<T extends Doc> (
   const identifier = (await labelProviderFn?.(client, id, doc)) ?? ''
   const title = (await titleProviderFn?.(client, id, doc)) ?? ''
 
-  const label = identifier !== '' && title !== '' && identifier !== title ? `${identifier} ${title}` : title ?? ''
+  const label =
+    identifier !== '' && title !== '' && identifier !== title
+      ? `${identifier} ${title}`
+      : title !== ''
+        ? title
+        : identifier
 
   return label
 }
@@ -443,7 +456,6 @@ export async function getTargetObjectFromUrl (
   urlOrLocation: string | Location
 ): Promise<{ _id: Ref<Doc>, _class: Ref<Class<Doc>> } | undefined> {
   const client = getClient()
-  const hierarchy = client.getHierarchy()
 
   let location: Location
   if (typeof urlOrLocation === 'string') {
@@ -461,19 +473,43 @@ export async function getTargetObjectFromUrl (
 
   const appAlias = (location.path[2] ?? '').trim()
   if (!(appAlias.length > 0)) return
-
   const excludedApps = getMetadata(workbench.metadata.ExcludedApplications) ?? []
   const apps: Application[] = client
     .getModel()
     .findAllSync<Application>(workbench.class.Application, { hidden: false, _id: { $nin: excludedApps } })
 
   const app = apps.find((p) => p.alias === appAlias)
+  const locationResolver = app?.locationResolver
+  const locationDataResolver = app?.locationDataResolver
 
-  if (app?.locationResolver === undefined) return
-  const locationResolverFn = await getResource(app.locationResolver)
-  const resolvedLocation = await locationResolverFn(location)
+  if ((location.fragment ?? '') !== '') {
+    const obj = await getObjectFromFragment(location.fragment ?? '')
+    if (obj !== undefined) return obj
+  }
 
-  const locationParts = decodeURIComponent(resolvedLocation?.loc?.fragment ?? '').split('|')
+  if (locationResolver !== undefined) {
+    const locationResolverFn = await getResource(locationResolver)
+    const resolvedLocation = await locationResolverFn(location)
+    const obj = await getObjectFromFragment(resolvedLocation?.loc?.fragment ?? '')
+    if (obj !== undefined) return obj
+  }
+
+  if (locationDataResolver !== undefined) {
+    const locationDataResolverFn = await getResource(locationDataResolver)
+    const locationData = await locationDataResolverFn(location)
+    if (locationData.objectId !== undefined && locationData.objectClass !== undefined) {
+      return { _id: locationData.objectId, _class: locationData.objectClass }
+    }
+  }
+}
+
+async function getObjectFromFragment (
+  fragment: string
+): Promise<{ _id: Ref<Doc>, _class: Ref<Class<Doc>> } | undefined> {
+  const client = getClient()
+  const hierarchy = client.getHierarchy()
+
+  const locationParts = decodeURIComponent(fragment).split('|')
   const id = locationParts[1] as Ref<Doc>
   const objectclass = locationParts[2] as Ref<Class<Doc>>
   if (id === undefined || objectclass === undefined) return

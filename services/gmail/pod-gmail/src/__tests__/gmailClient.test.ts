@@ -56,6 +56,10 @@ jest.mock('@hcengineering/core', () => {
   }
 })
 
+jest.mock('@hcengineering/mail-common', () => ({
+  createMessages: jest.fn().mockResolvedValue(undefined)
+}))
+
 jest.mock('googleapis', () => ({
   gmail_v1: {},
   google: {
@@ -69,7 +73,7 @@ jest.mock('googleapis', () => ({
 }))
 
 jest.mock('../tokens')
-jest.mock('../message/message')
+jest.mock('../message/adapter')
 jest.mock('../message/sync')
 jest.mock('../message/attachments')
 jest.mock('@hcengineering/server-client', () => ({
@@ -118,6 +122,17 @@ jest.mock('@hcengineering/setting', () => ({
 // Mock config
 jest.mock('../config', () => ({
   WATCH_TOPIC_NAME: 'test-topic'
+}))
+
+jest.mock('@hcengineering/account-client', () => ({
+  getClient: jest.fn().mockImplementation(() => ({
+    getLoginInfoByToken: jest.fn().mockResolvedValue({
+      endpoint: 'wss://test-endpoint.com',
+      workspace: 'mockWorkspaceId',
+      token: 'test-token'
+    })
+  })),
+  isWorkspaceLoginInfo: jest.fn().mockImplementation(() => true)
 }))
 
 describe('GmailClient', () => {

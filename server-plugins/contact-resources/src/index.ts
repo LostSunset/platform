@@ -102,11 +102,13 @@ export async function OnEmployeeCreate (_txes: Tx[], control: TriggerControl): P
     const account = person?.personUuid as AccountUuid
     if (account === undefined) continue
 
-    const spaces = await control.findAll(control.ctx, core.class.Space, { autoJoin: true })
-
     const txes = await createPersonSpace(account, mixinTx.objectId, control)
     result.push(...txes)
 
+    const emp = control.hierarchy.as(person, contact.mixin.Employee)
+    if (emp.role === 'GUEST') continue
+
+    const spaces = await control.findAll(control.ctx, core.class.Space, { autoJoin: true })
     for (const space of spaces) {
       if (space.members.includes(account)) continue
 
@@ -122,7 +124,10 @@ export async function OnEmployeeCreate (_txes: Tx[], control: TriggerControl): P
   const account = control.ctx.contextData.account
   if (account.role !== AccountRole.Owner) return result
 
-  const typedSpaces = await control.findAll(control.ctx, core.class.TypedSpace, {})
+  const typedSpaces: Space[] = [
+    ...(await control.findAll(control.ctx, core.class.TypedSpace, {})),
+    ...(await control.findAll(control.ctx, card.class.CardSpace, { space: core.space.Space }))
+  ]
 
   for (const space of typedSpaces) {
     if (space === undefined) continue
@@ -167,7 +172,7 @@ export async function OnPersonCreate (_txes: Tx[], control: TriggerControl): Pro
     const lastOne = (
       await control.findAll(control.ctx, card.class.Card, {}, { sort: { rank: SortingOrder.Descending }, limit: 1 })
     )[0]
-    const userProfileTx = control.txFactory.createTxCreateDoc<UserProfile>(contact.class.UserProfile, ctx.space, {
+    const userProfileTx = control.txFactory.createTxCreateDoc<UserProfile>(contact.class.UserProfile, ctx.objectSpace, {
       person: ctx.objectId,
       title: formatName(ctx.attributes.name),
       rank: makeRank(lastOne?.rank, undefined),
@@ -178,7 +183,7 @@ export async function OnPersonCreate (_txes: Tx[], control: TriggerControl): Pro
 
     result.push(userProfileTx)
     result.push(
-      control.txFactory.createTxUpdateDoc<Person>(ctx.objectClass, ctx.space, ctx.objectId, {
+      control.txFactory.createTxUpdateDoc<Person>(ctx.objectClass, ctx.objectSpace, ctx.objectId, {
         profile: userProfileTx.objectId
       })
     )

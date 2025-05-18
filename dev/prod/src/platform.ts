@@ -75,7 +75,8 @@ import github, { githubId } from '@hcengineering/github'
 import { bitrixId } from '@hcengineering/bitrix'
 import {inboxId} from '@hcengineering/inbox'
 import {achievementId} from '@hcengineering/achievement'
-import {communicationId} from '@hcengineering/communication'
+import communication, { communicationId } from '@hcengineering/communication'
+import {emojiId} from '@hcengineering/emoji'
 
 import '@hcengineering/activity-assets'
 import '@hcengineering/analytics-collector-assets'
@@ -130,6 +131,7 @@ import '@hcengineering/mail-assets'
 import '@hcengineering/github-assets'
 import '@hcengineering/achievement-assets'
 import '@hcengineering/communication-assets'
+import '@hcengineering/emoji-assets'
 
 import { coreId } from '@hcengineering/core'
 import presentation, {
@@ -190,7 +192,8 @@ export interface Config {
   PUBLIC_SCHEDULE_URL?: string
   CALDAV_SERVER_URL?: string
   EXPORT_URL?: string
-  MAIL_URL?: string
+  MAIL_URL?: string,
+  COMMUNICATION_API_ENABLED?: string
 }
 
 export interface Branding {
@@ -365,6 +368,7 @@ function configureI18n(): void {
   addStringsLoader(inboxId, async (lang: string) => await import(`@hcengineering/inbox-assets/lang/${lang}.json`))
   addStringsLoader(achievementId, async (lang: string) => await import(`@hcengineering/achievement-assets/lang/${lang}.json`))
   addStringsLoader(communicationId, async (lang: string) => await import(`@hcengineering/communication-assets/lang/${lang}.json`))
+  addStringsLoader(emojiId, async (lang: string) => await import(`@hcengineering/emoji-assets/lang/${lang}.json`))
 }
 
 export async function configurePlatform() {
@@ -438,6 +442,7 @@ export async function configurePlatform() {
   setMetadata(presentation.metadata.MailUrl, config.MAIL_URL)
   setMetadata(recorder.metadata.StreamUrl, config.STREAM_URL)
   setMetadata(textEditor.metadata.Collaborator, config.COLLABORATOR)
+  setMetadata(communication.metadata.Enabled, config.COMMUNICATION_API_ENABLED === 'true')
 
   if (config.MODEL_VERSION != null) {
     console.log('Minimal Model version requirement', config.MODEL_VERSION)
@@ -554,7 +559,7 @@ export async function configurePlatform() {
   addLocation(uploaderId, () => import(/* webpackChunkName: "uploader" */ '@hcengineering/uploader-resources'))
   addLocation(recorderId, () => import(/* webpackChunkName: "recorder" */ '@hcengineering/recorder-resources'))
   addLocation(mediaId, () => import(/* webpackChunkName: "media" */ '@hcengineering/media-resources'))
-  
+
   addLocation(
     testManagementId,
     () => import(/* webpackChunkName: "test-management" */ '@hcengineering/test-management-resources')
@@ -562,12 +567,12 @@ export async function configurePlatform() {
   addLocation(surveyId, () => import(/* webpackChunkName: "survey" */ '@hcengineering/survey-resources'))
   addLocation(presenceId, () => import(/* webpackChunkName: "presence" */ '@hcengineering/presence-resources'))
   addLocation(cardId, () => import(/* webpackChunkName: "card" */ '@hcengineering/card-resources'))
-  addLocation(mailId, () => import(/* webpackChunkName: "card" */ '@hcengineering/mail-resources'))
   addLocation(chatId, () => import(/* webpackChunkName: "chat" */ '@hcengineering/chat-resources'))
   addLocation(processId, () => import(/* webpackChunkName: "process" */ '@hcengineering/process-resources'))
   addLocation(inboxId, () => import(/* webpackChunkName: "inbox" */ '@hcengineering/inbox-resources'))
   addLocation(achievementId, () => import(/* webpackChunkName: "achievement" */ '@hcengineering/achievement-resources'))
   addLocation(communicationId, () => import(/* webpackChunkName: "communication" */ '@hcengineering/communication-resources'))
+  addLocation(emojiId, () => import(/* webpackChunkName: "achievement" */ '@hcengineering/emoji-resources'))
 
   setMetadata(client.metadata.FilterModel, 'ui')
   setMetadata(client.metadata.ExtraPlugins, ['preference' as Plugin])

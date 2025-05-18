@@ -79,13 +79,11 @@ import { createNotification } from './notifications'
 import { InstallationRecord, PlatformWorker } from './platform'
 import { CommentSyncManager } from './sync/comments'
 import { IssueSyncManager } from './sync/issues'
-import { ProjectsSyncManager } from './sync/projects'
 import { PullRequestSyncManager } from './sync/pullrequests'
 import { RepositorySyncMapper } from './sync/repository'
 import { ReviewCommentSyncManager } from './sync/reviewComments'
 import { ReviewThreadSyncManager } from './sync/reviewThreads'
 import { ReviewSyncManager } from './sync/reviews'
-import { syncConfig } from './sync/syncConfig'
 import { UsersSyncManager, fetchViewerDetails } from './sync/users'
 import { errorToObj } from './sync/utils'
 import {
@@ -407,10 +405,6 @@ export class GithubWorker implements IntegrationManager {
 
     this.mappers = [
       { _class: [github.mixin.GithubProject], mapper: this.repositoryManager },
-      {
-        _class: [github.class.GithubIntegration, tracker.class.Milestone],
-        mapper: new ProjectsSyncManager(this.ctx.newChild('project', {}), this._client, this.liveQuery)
-      },
       {
         _class: [tracker.class.Issue],
         mapper: new IssueSyncManager(this.ctx.newChild('issue', {}), this._client, this.liveQuery, this.collaborator)
@@ -861,7 +855,6 @@ export class GithubWorker implements IntegrationManager {
             installationName: inst?.installationName ?? '',
             enabled: !inst.suspended,
             synchronized: new Set(),
-            projectStructure: new Map(),
             syncLock: new Map()
           }
           this.integrations.set(it.installationId, current)
@@ -1287,7 +1280,7 @@ export class GithubWorker implements IntegrationManager {
       if (it.enabled) {
         const _projects = []
         for (const p of allProjects) {
-          if (p.integration === it.integration._id && (!syncConfig.MainProject || it.projectStructure.has(p._id))) {
+          if (p.integration === it.integration._id) {
             _projects.push(p)
           }
         }
@@ -1667,6 +1660,11 @@ export class GithubWorker implements IntegrationManager {
         reconnect(workspace.uuid, event)
       }))
 
+      const githubEnabled = (await client.findOne(core.class.PluginConfiguration, { pluginId: githubId }))?.enabled
+      if (githubEnabled === false) {
+        return undefined
+      }
+
       await GithubWorker.checkIntegrations(client, installations)
 
       const worker = new GithubWorker(
@@ -1686,12 +1684,12 @@ export class GithubWorker implements IntegrationManager {
     } catch (err: any) {
       ctx.error('timeout during to connect', { workspace, error: err })
       await client?.close()
+      return undefined
     }
   }
 
   static async checkIntegrations (client: Client, installations: Map<number, InstallationRecord>): Promise<void> {
     const wsIntegerations = await client.findAll(github.class.GithubIntegration, {})
-
     for (const intValue of wsIntegerations) {
       if (!installations.has(intValue.installationId)) {
         const ops = new TxOperations(client, core.account.System)

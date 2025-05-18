@@ -19,6 +19,14 @@ import { type StorageAdapter } from '@hcengineering/server-core'
 import setting from '@hcengineering/setting'
 import type { Credentials, OAuth2Client } from 'google-auth-library'
 import { gmail_v1, google } from 'googleapis'
+import {
+  getClient as getAccountClient,
+  Integration,
+  WorkspaceLoginInfo,
+  isWorkspaceLoginInfo,
+  AccountClient
+} from '@hcengineering/account-client'
+
 import { encode64 } from './base64'
 import config from './config'
 import { GmailController } from './gmailController'
@@ -30,10 +38,10 @@ import { getOrCreateSocialId } from './accounts'
 import { createIntegrationIfNotEsixts, disableIntegration, removeIntegration } from './integrations'
 import { AttachmentHandler } from './message/attachments'
 import { TokenStorage } from './tokens'
-import { MessageManager } from './message/message'
+import { createMessageManager } from './message/adapter'
 import { SyncManager } from './message/sync'
 import { getEmail } from './gmail/utils'
-import { Integration } from '@hcengineering/account-client'
+import { IMessageManager } from './message/types'
 
 const SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
@@ -81,7 +89,7 @@ export class GmailClient {
   private refreshTimer: NodeJS.Timeout | undefined = undefined
   private readonly rateLimiter = new RateLimiter(1000, 200)
   private readonly attachmentHandler: AttachmentHandler
-  private readonly messageManager: MessageManager
+  private readonly messageManager: IMessageManager
   private readonly syncManager: SyncManager
   private readonly integrationToken: string
   private integration: Integration | undefined = undefined
@@ -92,26 +100,30 @@ export class GmailClient {
     private readonly gmail: gmail_v1.Resource$Users,
     private readonly user: User,
     client: Client,
-    workspaceId: WorkspaceUuid,
+    accountClient: AccountClient,
+    wsInfo: WorkspaceLoginInfo,
     storageAdapter: StorageAdapter,
     private readonly workspace: WorkspaceClient,
     email: string,
     private socialId: SocialId
   ) {
     this.email = email
-    this.integrationToken = serviceToken(workspaceId)
-    this.tokenStorage = new TokenStorage(this.ctx, workspaceId, this.integrationToken)
+    this.integrationToken = serviceToken(wsInfo.workspace)
+    this.tokenStorage = new TokenStorage(this.ctx, wsInfo.workspace, this.integrationToken)
     this.client = new TxOperations(client, this.socialId._id)
     this.account = this.user.userId
-    this.attachmentHandler = new AttachmentHandler(ctx, workspaceId, storageAdapter, this.gmail, this.client)
-    this.messageManager = new MessageManager(
+    this.attachmentHandler = new AttachmentHandler(ctx, wsInfo, storageAdapter, this.gmail, this.client)
+    const keyValueClient = getKvsClient(this.integrationToken)
+    this.messageManager = createMessageManager(
       ctx,
       this.client,
+      keyValueClient,
+      accountClient,
       this.attachmentHandler,
-      this.socialId._id,
-      this.workspace
+      this.workspace,
+      this.integrationToken,
+      socialId
     )
-    const keyValueClient = getKvsClient(this.integrationToken)
     this.syncManager = new SyncManager(
       ctx,
       this.messageManager,
@@ -158,13 +170,22 @@ export class GmailClient {
     }
     user.socialId = socialId
 
+    const integrationToken = serviceToken(workspaceId)
+    const accountClient = getAccountClient(config.AccountsURL, integrationToken)
+    const workspaceInfo = await accountClient.getLoginInfoByToken()
+    if (!isWorkspaceLoginInfo(workspaceInfo)) {
+      ctx.error('Unable to get workspace info', { workspaceId, email })
+      throw new Error('Unable to get workspace info')
+    }
+
     const gmailClient = new GmailClient(
       ctx,
       oAuth2Client,
       googleClient,
       user,
       client,
-      workspaceId,
+      accountClient,
+      workspaceInfo,
       storageAdapter,
       workspace,
       email,

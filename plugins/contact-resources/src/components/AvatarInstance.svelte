@@ -122,7 +122,11 @@
       />
     {:else}
       <div class="icon">
-        <Icon icon={icon ?? AvatarIcon} size={'full'} />
+        <Icon
+          icon={icon ?? AvatarIcon}
+          fill={color ? 'var(--primary-button-color)' : 'var(--theme-caption-color)'}
+          size={'full'}
+        />
       </div>
     {/if}
   </div>

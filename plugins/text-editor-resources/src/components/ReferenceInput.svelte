@@ -13,7 +13,7 @@
 // limitations under the License.
 -->
 <script lang="ts">
-  import { Markup } from '@hcengineering/core'
+  import { Class, Doc, Markup, Ref, Blob } from '@hcengineering/core'
   import { Asset, IntlString } from '@hcengineering/platform'
   import { EmptyMarkup, isEmptyMarkup } from '@hcengineering/text'
   import textEditor, { RefAction, TextEditorHandler } from '@hcengineering/text-editor'
@@ -61,6 +61,7 @@
   export let canEmbedImages = true
   export let onPaste: ((view: EditorView, event: ClipboardEvent) => boolean) | undefined = undefined
   export let onCancel: (() => void) | undefined = undefined
+  export let docClass: Ref<Class<Doc>> | undefined = undefined
 
   const dispatch = createEventDispatcher()
   const buttonSize = 'medium'
@@ -83,6 +84,9 @@
   const editorHandler: TextEditorHandler = {
     insertText: (text) => {
       editor?.insertText(text)
+    },
+    insertEmoji: (text: string, image?: Ref<Blob>) => {
+      editor?.insertEmoji(text, image)
     },
     insertMarkup: (markup) => {
       editor?.insertMarkup(markup)
@@ -142,6 +146,8 @@
   }
   const completionPlugin = ReferenceExtension.configure({
     ...referenceConfig,
+    docClass,
+    multipleMentions: true,
     showDoc (event: MouseEvent, _id: string, _class: string) {
       dispatch('open-document', { event, _id, _class })
     }

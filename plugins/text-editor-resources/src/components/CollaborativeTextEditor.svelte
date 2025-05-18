@@ -131,7 +131,7 @@
   const content = getAttribute(client, object, attribute)
   const collaborativeDoc = makeDocCollabId(object, objectAttr)
 
-  const ydoc = getContext<YDoc>(CollaborationIds.Doc) ?? new YDoc({ guid: generateId() })
+  const ydoc = getContext<YDoc>(CollaborationIds.Doc) ?? new YDoc({ guid: generateId(), gc: false })
   const contextProvider = getContext<Provider>(CollaborationIds.Provider)
 
   const localProvider = createLocalProvider(ydoc, collaborativeDoc)
@@ -177,6 +177,9 @@
   const editorHandler: TextEditorHandler = {
     insertText: (text) => {
       editor?.commands.insertContent(text)
+    },
+    insertEmoji: (text: string, image?: Ref<Blob>) => {
+      editor?.commands.insertEmoji(text, image === undefined ? 'unicode' : 'image', image)
     },
     insertMarkup: (markup) => {
       editor?.commands.insertContent(markupToJSON(markup))
@@ -412,7 +415,7 @@
   function getSavedBoard (id: string): SavedBoard {
     let board = savedBoards[id]
     if (board === undefined) {
-      const ydoc = new YDoc({ guid: id })
+      const ydoc = new YDoc({ guid: id, gc: false })
       // We don't have a real class for boards,
       // but collaborator only needs a string id
       // which is produced from such an id-object
@@ -448,6 +451,10 @@
         })
       )
     }
+
+    // it is recommended to wait for the local provider to be loaded
+    // https://discuss.yjs.dev/t/initial-offline-value-of-a-shared-document/465/4
+    await localProvider.loaded
 
     editor = new Editor({
       enableContentCheck: true,

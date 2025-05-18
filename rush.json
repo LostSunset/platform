@@ -933,6 +933,11 @@
       "shouldPublish": false
     },
     {
+      "packageName": "@hcengineering/pod-external",
+      "projectFolder": "pods/external",
+      "shouldPublish": false
+    },
+    {
       "packageName": "@hcengineering/front",
       "projectFolder": "server/front",
       "shouldPublish": false
@@ -2354,11 +2359,6 @@
       "shouldPublish": false
     },
     {
-      "packageName": "@hcengineering/mail-resources",
-      "projectFolder": "plugins/mail-resources",
-      "shouldPublish": false
-    },
-    {
       "packageName": "@hcengineering/pod-mail",
       "projectFolder": "services/mail/pod-mail",
       "shouldPublish": false
@@ -2496,6 +2496,31 @@
     {
       "packageName": "@hcengineering/model-communication",
       "projectFolder": "models/communication",
+      "shouldPublish": false
+    },
+    {
+      "packageName": "@hcengineering/mail-common",
+      "projectFolder": "services/mail/mail-common",
+      "shouldPublish": false
+    },
+    {
+      "packageName": "@hcengineering/emoji",
+      "projectFolder": "plugins/emoji",
+      "shouldPublish": false
+    },
+    {
+      "packageName": "@hcengineering/emoji-assets",
+      "projectFolder": "plugins/emoji-assets",
+      "shouldPublish": false
+    },
+    {
+      "packageName": "@hcengineering/emoji-resources",
+      "projectFolder": "plugins/emoji-resources",
+      "shouldPublish": false
+    },
+    {
+      "packageName": "@hcengineering/model-emoji",
+      "projectFolder": "models/emoji",
       "shouldPublish": false
     }
   ]
