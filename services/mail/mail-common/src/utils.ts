@@ -23,6 +23,28 @@ export function getMdContent (ctx: MeasureContext, email: EmailMessage): string 
     try {
       const html = sanitizeHtml(email.content)
       const tds = new TurndownService()
+
+      tds.addRule('links', {
+        filter: 'a',
+        replacement: function (content, node: Node) {
+          try {
+            const element = node as HTMLElement
+            const href = element.getAttribute('href')
+            const title = element.title ?? ''
+            // Trim content to prevent empty lines inside links
+            const trimmedContent = content.trim().replace(/\n\s*\n/g, ' ')
+            if (href == null) {
+              return trimmedContent
+            }
+            const titlePart = title !== '' ? ` "${title}"` : ''
+            return `[${trimmedContent}](${href}${titlePart})`
+          } catch (error: any) {
+            ctx.warn('Failed to parse link', { error: error.message })
+            return content
+          }
+        }
+      })
+
       return tds.turndown(html)
     } catch (error) {
       ctx.warn('Failed to parse html content', { error })
@@ -72,41 +94,20 @@ export function parseNameFromEmailHeader (headerValue: string | undefined): Emai
 
   if (match == null) {
     const address = headerValue.trim()
-    const parts = address.split('@')
     return {
       email: address,
-      firstName: parts[0],
-      lastName: parts[1]
+      firstName: address,
+      lastName: ''
     }
   }
 
   const displayName = match[1]?.trim()
   const email = match[2].trim()
 
-  if (displayName == null || displayName === '') {
-    const parts = email.split('@')
-    return {
-      email,
-      firstName: parts[0],
-      lastName: parts[1]
-    }
-  }
-
-  const nameParts = displayName.split(/\s+/)
-  let firstName: string | undefined
-  let lastName: string | undefined
-
-  if (nameParts.length === 1) {
-    firstName = nameParts[0]
-  } else if (nameParts.length > 1) {
-    firstName = nameParts[0]
-    lastName = nameParts.slice(1).join(' ')
-  }
-
-  const parts = email.split('@')
+  const wrappedEmail = displayName != null && displayName.length > 0 ? `<${email}>` : email
   return {
     email,
-    firstName: firstName ?? parts[0],
-    lastName: lastName ?? parts[1]
+    firstName: wrappedEmail,
+    lastName: displayName ?? ''
   }
 }

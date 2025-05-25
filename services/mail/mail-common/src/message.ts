@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+import { Producer } from 'kafkajs'
+
 import { WorkspaceLoginInfo } from '@hcengineering/account-client'
 import { type Card } from '@hcengineering/card'
-import {
-  type RestClient as CommunicationClient,
-  createRestClient as getCommunicationClient
-} from '@hcengineering/communication-rest-client'
 import { MessageType } from '@hcengineering/communication-types'
 import chat from '@hcengineering/chat'
 import { PersonSpace } from '@hcengineering/contact'
@@ -27,14 +25,18 @@ import {
   type PersonId,
   type Ref,
   type TxOperations,
+  Doc,
   generateId,
   PersonUuid,
-  RateLimiter
+  RateLimiter,
+  Space
 } from '@hcengineering/core'
 import mail from '@hcengineering/mail'
 import { type KeyValueClient } from '@hcengineering/kvs-client'
 
 import { buildStorageFromConfig, storageConfigFromEnv } from '@hcengineering/server-storage'
+import { MessageRequestEventType } from '@hcengineering/communication-sdk-types'
+import { generateMessageId } from '@hcengineering/communication-shared'
 
 import { BaseConfig, type Attachment } from './types'
 import { EmailMessage } from './types'
@@ -44,15 +46,43 @@ import { PersonSpacesCacheFactory } from './personSpaces'
 import { ChannelCache, ChannelCacheFactory } from './channel'
 import { ThreadLookupService } from './thread'
 
+/**
+ * Creates mail messages in the platform
+ *
+ * This function processes an email message and creates corresponding chat messages. It handles:
+ * - Ensuring persons exist for email addresses
+ * - Finding or creating channels for participants
+ * - Creating threads for messages
+ * - Uploading attachments to storage
+ * - Sending message events to Kafka
+ *
+ * @param {BaseConfig} config - Configuration options including storage and Kafka settings
+ * @param {MeasureContext} ctx - Context for logging and performance measurement
+ * @param {TxOperations} txClient - Client for database transactions
+ * @param {KeyValueClient} keyValueClient - Client for key-value storage operations
+ * @param {Producer} producer - Kafka producer for sending message events
+ * @param {string} token - Authentication token for API calls
+ * @param {WorkspaceLoginInfo} wsInfo - Workspace information including ID and URLs
+ * @param {EmailMessage} message - The email message to process
+ * @param {Attachment[]} attachments - Array of attachments for the message
+ * @param {PersonId[]} [targetPersons] - Optional list of specific persons who should receive the message.
+ *                                       If not provided, all existing accounts from email addresses will be used.
+ * @returns {Promise<void>} A promise that resolves when all messages have been created
+ * @throws Will log errors but not throw exceptions for partial failures
+ *
+ * @public
+ */
 export async function createMessages (
   config: BaseConfig,
   ctx: MeasureContext,
   txClient: TxOperations,
   keyValueClient: KeyValueClient,
+  producer: Producer,
   token: string,
   wsInfo: WorkspaceLoginInfo,
   message: EmailMessage,
-  attachments: Attachment[]
+  attachments: Attachment[],
+  targetPersons?: PersonId[]
 ): Promise<void> {
   const { mailId, from, subject, replyTo } = message
   const tos = [...(message.to ?? []), ...(message.copy ?? [])]
@@ -62,7 +92,6 @@ export async function createMessages (
   const personSpacesCache = PersonSpacesCacheFactory.getInstance(ctx, txClient, wsInfo.workspace)
   const channelCache = ChannelCacheFactory.getInstance(ctx, txClient, wsInfo.workspace)
   const threadLookup = ThreadLookupService.getInstance(ctx, keyValueClient, token)
-  const msgClient = getCommunicationClient(wsInfo.endpoint, wsInfo.workspace, wsInfo.token)
 
   const fromPerson = await personCache.ensurePerson(from)
 
@@ -80,7 +109,7 @@ export async function createMessages (
   }
 
   const modifiedBy = fromPerson.socialId
-  const participants = [fromPerson.socialId, ...toPersons.map((p) => p.socialId)]
+  const participants = targetPersons ?? [fromPerson.socialId, ...toPersons.map((p) => p.socialId)]
   const content = getMdContent(ctx, message)
 
   const attachedBlobs: Attachment[] = []
@@ -116,10 +145,12 @@ export async function createMessages (
     const spaces = await personSpacesCache.getPersonSpaces(mailId, fromPerson.uuid, from.email)
     if (spaces.length > 0) {
       await saveMessageToSpaces(
+        config,
         ctx,
         txClient,
-        msgClient,
+        producer,
         threadLookup,
+        wsInfo,
         mailId,
         spaces,
         participants,
@@ -148,10 +179,12 @@ export async function createMessages (
       const spaces = await personSpacesCache.getPersonSpaces(mailId, to.uuid, to.address)
       if (spaces.length > 0) {
         await saveMessageToSpaces(
+          config,
           ctx,
           txClient,
-          msgClient,
+          producer,
           threadLookup,
+          wsInfo,
           mailId,
           spaces,
           participants,
@@ -173,10 +206,12 @@ export async function createMessages (
 }
 
 async function saveMessageToSpaces (
+  config: BaseConfig,
   ctx: MeasureContext,
   client: TxOperations,
-  msgClient: CommunicationClient,
+  producer: Producer,
   threadLookup: ThreadLookupService,
+  wsInfo: WorkspaceLoginInfo,
   mailId: string,
   spaces: PersonSpace[],
   participants: PersonId[],
@@ -208,8 +243,9 @@ async function saveMessageToSpaces (
           ctx.info('Found existing thread', { mailId, threadId, spaceId })
         }
       }
+      let channel: Ref<Doc<Space>> | undefined
       if (threadId === undefined) {
-        const channel = await channelCache.getOrCreateChannel(spaceId, participants, me, owner)
+        channel = await channelCache.getOrCreateChannel(spaceId, participants, me, owner)
         const newThreadId = await client.createDoc(
           chat.masterTag.Thread,
           space._id,
@@ -221,10 +257,11 @@ async function saveMessageToSpaces (
             archived: false,
             createdBy: modifiedBy,
             modifiedBy,
-            parent: channel
+            parent: channel,
+            createdOn: createdDate
           },
           generateId(),
-          undefined,
+          createdDate,
           modifiedBy
         )
         await client.createMixin(
@@ -233,37 +270,69 @@ async function saveMessageToSpaces (
           space._id,
           mail.tag.MailThread,
           {},
-          Date.now(),
+          createdDate,
           owner
         )
         threadId = newThreadId as Ref<Card>
         ctx.info('Created new thread', { mailId, threadId, spaceId })
       }
 
-      const { id: messageId, created: messageCreated } = await msgClient.createMessage(
-        threadId,
-        chat.masterTag.Thread,
-        content,
-        modifiedBy,
-        MessageType.Message,
-        {
-          created: createdDate
-        }
-      )
-      ctx.info('Created message', { mailId, messageId, threadId })
+      const messageId = generateMessageId()
+      const created = new Date(createdDate)
 
-      for (const a of attachments) {
-        await msgClient.createFile(
-          threadId,
-          messageId,
-          messageCreated,
-          a.id as Ref<Blob>,
-          a.contentType,
-          a.name,
-          a.data.length,
-          modifiedBy
+      const messageData = Buffer.from(
+        JSON.stringify({
+          type: MessageRequestEventType.CreateMessage,
+          messageType: MessageType.Message,
+          card: threadId,
+          cardType: chat.masterTag.Thread,
+          content,
+          creator: modifiedBy,
+          created,
+          id: messageId
+        })
+      )
+      await producer.send({
+        topic: config.CommunicationTopic,
+        messages: [
+          {
+            key: Buffer.from(channel ?? spaceId),
+            value: messageData,
+            headers: {
+              WorkspaceUuid: wsInfo.workspace
+            }
+          }
+        ]
+      })
+      ctx.info('Send message event', { mailId, messageId, threadId })
+
+      const fileData: Buffer[] = attachments.map((a) =>
+        Buffer.from(
+          JSON.stringify({
+            type: MessageRequestEventType.CreateFile,
+            card: threadId,
+            message: messageId,
+            messageCreated: created,
+            blobId: a.id as Ref<Blob>,
+            fileType: a.contentType,
+            filename: a.name,
+            size: a.data.length,
+            creator: modifiedBy
+          })
         )
-      }
+      )
+      const fileEvents = fileData.map((data) => ({
+        key: Buffer.from(channel ?? spaceId),
+        value: data,
+        headers: {
+          WorkspaceUuid: wsInfo.workspace
+        }
+      }))
+      await producer.send({
+        topic: config.CommunicationTopic,
+        messages: fileEvents
+      })
+      ctx.info('Send file events', { mailId, messageId, threadId, count: fileEvents.length })
 
       await threadLookup.setThreadId(mailId, space._id, threadId)
     })

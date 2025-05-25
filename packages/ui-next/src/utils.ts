@@ -24,7 +24,7 @@ import {
 import { markupToJSON, jsonToMarkup, markupToText } from '@hcengineering/text'
 import { showPopup } from '@hcengineering/ui'
 import { markupToMarkdown, markdownToMarkup } from '@hcengineering/text-markdown'
-import { type Message } from '@hcengineering/communication-types'
+import { MessageType, type Message } from '@hcengineering/communication-types'
 import { getClient, getCommunicationClient } from '@hcengineering/presentation'
 import { employeeByPersonIdStore } from '@hcengineering/contact-resources'
 import cardPlugin, { type Card } from '@hcengineering/card'
@@ -145,4 +145,15 @@ function createThreadTitle (message: Message, parent: Card): string {
 
   const titleFromMessage = `${messageText.slice(0, 100)}${messageText.length > 100 ? '...' : ''}`
   return titleFromMessage.length > 0 ? titleFromMessage : `Thread from ${parent.title}`
+}
+
+export function isMessageEmpty (message: Message): boolean {
+  return (
+    message.content.trim() === '' &&
+    message.files.length === 0 &&
+    message.reactions.length === 0 &&
+    message.thread == null &&
+    message.edited == null &&
+    message.type === MessageType.Message
+  )
 }

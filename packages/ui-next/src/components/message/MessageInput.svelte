@@ -14,12 +14,18 @@
 -->
 
 <script lang="ts">
-  import { Markup, RateLimiter } from '@hcengineering/core'
-  import { tick, createEventDispatcher, onDestroy } from 'svelte'
-  import { uploadFile, deleteFile, getCommunicationClient, getClient } from '@hcengineering/presentation'
-  import { Message } from '@hcengineering/communication-types'
+  import { Markup, RateLimiter, Ref } from '@hcengineering/core'
+  import { tick, createEventDispatcher } from 'svelte'
+  import {
+    uploadFile,
+    deleteFile,
+    getCommunicationClient,
+    getClient,
+    getFileMetadata
+  } from '@hcengineering/presentation'
+  import { Message, MessageID } from '@hcengineering/communication-types'
   import { AttachmentPresenter } from '@hcengineering/attachment-resources'
-  import { isEmptyMarkup } from '@hcengineering/text'
+  import { areEqualMarkups, isEmptyMarkup, EmptyMarkup } from '@hcengineering/text'
   import { updateMyPresence } from '@hcengineering/presence-resources'
   import { ThrottledCaller } from '@hcengineering/ui'
   import { getCurrentEmployee } from '@hcengineering/contact'
@@ -29,12 +35,12 @@
   import { defaultMessageInputActions, toMarkdown } from '../../utils'
   import uiNext from '../../plugin'
   import IconPlus from '../icons/IconPlus.svelte'
-  import { type TextInputAction, UploadedFile, type PresenceTyping } from '../../types'
+  import { type TextInputAction, UploadedFile, type PresenceTyping, MessageDraft } from '../../types'
   import TypingPresenter from '../TypingPresenter.svelte'
+  import { getDraft, messageToDraft, saveDraft, getEmptyDraft, removeDraft } from '../../draft'
 
   export let card: Card
   export let message: Message | undefined = undefined
-  export let content: Markup | undefined = undefined
   export let title: string = ''
   export let onCancel: (() => void) | undefined = undefined
   export let onSubmit: ((markdown: string, files: UploadedFile[]) => Promise<void>) | undefined = undefined
@@ -45,19 +51,47 @@
   const client = getClient()
   const me = getCurrentEmployee()
 
-  let files: UploadedFile[] = []
+  let prevCard: Ref<Card> | undefined = card._id
+  let prevMessage: MessageID | undefined = message?.id
+  let draft: MessageDraft = message != null ? messageToDraft(message) : getDraft(card._id)
+
   let inputElement: HTMLInputElement
 
   let progress = false
+
+  $: if (prevCard !== card._id) {
+    prevCard = card._id
+    initDraft()
+  }
+
+  $: if (prevMessage !== message?.id) {
+    prevMessage = message?.id
+    initDraft()
+  }
+
+  $: _saveDraft(draft)
+
+  function initDraft (): void {
+    draft = message != null ? messageToDraft(message) : getDraft(card._id)
+  }
+
+  function _saveDraft (draft: MessageDraft): void {
+    if (message === undefined) {
+      saveDraft(card._id, draft)
+    }
+  }
 
   async function handleSubmit (event: CustomEvent<Markup>): Promise<void> {
     event.preventDefault()
     event.stopPropagation()
 
     const markup = event.detail
-    const filesToLoad = files
+    const filesToLoad = draft.files
 
-    files = []
+    draft = getEmptyDraft()
+    if (message === undefined) {
+      removeDraft(card._id)
+    }
 
     const markdown = toMarkdown(markup)
 
@@ -78,7 +112,16 @@
     const { id, created } = await communicationClient.createMessage(card._id, card._class, markdown)
 
     for (const file of files) {
-      await communicationClient.createFile(card._id, id, created, file.blobId, file.type, file.filename, file.size)
+      await communicationClient.createFile(
+        card._id,
+        id,
+        created,
+        file.blobId,
+        file.type,
+        file.filename,
+        file.size,
+        file.metadata
+      )
     }
     await client.update(card, {}, false, Date.now())
   }
@@ -87,6 +130,7 @@
     await communicationClient.updateMessage(card._id, message.id, message.created, markdown)
 
     for (const file of files) {
+      if (message.files.find((it) => it.blobId === file.blobId)) continue
       await communicationClient.createFile(
         card._id,
         message.id,
@@ -94,8 +138,15 @@
         file.blobId,
         file.type,
         file.filename,
-        file.size
+        file.size,
+        file.metadata
       )
+    }
+
+    for (const file of message.files) {
+      if (files.find((it) => it.blobId === file.blobId)) continue
+      void deleteFile(file.blobId)
+      await communicationClient.removeFile(card._id, message.id, message.created, file.blobId)
     }
 
     dispatch('edited')
@@ -120,14 +171,21 @@
 
   async function addFile (file: File): Promise<void> {
     const uuid = await uploadFile(file)
+    const metadata = await getFileMetadata(file, uuid)
 
-    files.push({
-      blobId: uuid,
-      type: file.type,
-      filename: file.name,
-      size: file.size
-    })
-    files = files
+    draft = {
+      ...draft,
+      files: [
+        ...draft.files,
+        {
+          blobId: uuid,
+          type: file.type,
+          filename: file.name,
+          size: file.size,
+          metadata
+        }
+      ]
+    }
   }
 
   const attachAction: TextInputAction = {
@@ -139,18 +197,16 @@
     },
     order: 1000
   }
-  onDestroy(() => {
-    for (const file of files) {
-      void deleteFile(file.blobId)
-    }
-  })
 
   async function handleCancel (): Promise<void> {
     onCancel?.()
-    for (const file of files) {
-      void deleteFile(file.blobId)
+    for (const file of draft.files) {
+      const fromMessage = message?.files.some((it) => it.blobId === file.blobId)
+      if (!fromMessage) {
+        void deleteFile(file.blobId)
+      }
     }
-    files = []
+    draft = getEmptyDraft()
   }
 
   async function loadFiles (evt: ClipboardEvent): Promise<void> {
@@ -202,10 +258,15 @@
     progress = false
   }
 
+  let newMarkup: Markup | undefined = undefined
   async function onUpdate (event: CustomEvent<Markup>): Promise<void> {
+    draft = {
+      ...draft,
+      content: event.detail
+    }
     if (message !== undefined) return
-    const markup = event.detail
-    if (!isEmptyMarkup(markup)) {
+    newMarkup = event.detail
+    if (!isEmptyMarkup(newMarkup)) {
       throttle.call(() => {
         const room = { objectId: card._id, objectClass: card._class }
         const typing: PresenceTyping = { person: me, lastTyping: Date.now() }
@@ -213,8 +274,24 @@
       })
     }
   }
+
+  function isEmptyDraft (): boolean {
+    return isEmptyMarkup(draft.content) && draft.files.length === 0
+  }
+
+  function hasChanges (files: UploadedFile[], message: Message | undefined): boolean {
+    if (isEmptyDraft()) return false
+    if (message === undefined) return files.length > 0
+    if (message.files.length !== files.length) return true
+    if (message.files.some((it) => !files.some((f) => f.blobId === it.blobId))) return true
+    if (newMarkup === undefined || draft.content === undefined) return false
+
+    return !areEqualMarkups(draft.content, newMarkup ?? EmptyMarkup)
+  }
 </script>
 
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
   class="flex-col no-print w-full"
   on:dragover|preventDefault={() => {}}
@@ -232,11 +309,11 @@
     on:change={fileSelected}
   />
   <TextInput
-    {content}
+    content={draft.content}
     placeholder={title !== '' ? uiNext.string.MessageIn : undefined}
     placeholderParams={title !== '' ? { title } : undefined}
     loading={progress}
-    hasNonTextContent={files.length > 0}
+    hasChanges={hasChanges(draft.files, message)}
     actions={[...defaultMessageInputActions, attachAction]}
     on:submit={handleSubmit}
     on:update={onUpdate}
@@ -244,22 +321,30 @@
     onPaste={pasteAction}
   >
     <div slot="header" class="header">
-      {#if files.length > 0}
-        <div class="flex-row-center files-list scroll-divider-color flex-gap-2">
-          {#each files as file (file.blobId)}
+      {#if draft.files.length > 0}
+        <div class="flex-row-center files-list scroll-divider-color flex-gap-2 mt-2">
+          {#each draft.files as file (file.blobId)}
             <div class="item flex">
               <AttachmentPresenter
                 value={{
                   file: file.blobId,
                   name: file.filename,
                   type: file.type,
-                  size: file.size
+                  size: file.size,
+                  metadata: file.metadata
                 }}
+                showPreview
                 removable
                 on:remove={(result) => {
                   if (result !== undefined) {
-                    files = files.filter((it) => it.blobId !== file.blobId)
-                    void deleteFile(file.blobId)
+                    draft = {
+                      ...draft,
+                      files: draft.files.filter((it) => it.blobId !== file.blobId)
+                    }
+
+                    if (!message?.files?.some((it) => it.blobId === file.blobId)) {
+                      void deleteFile(file.blobId)
+                    }
                   }
                 }}
               />
@@ -284,7 +369,6 @@
   }
 
   .files-list {
-    padding: 0.5rem;
     overflow-x: auto;
     overflow-y: hidden;
 

@@ -14,7 +14,6 @@
 import { type Card } from '@hcengineering/card'
 import core, {
   generateId,
-  type ModelDb,
   type AnyAttribute,
   type ArrOf,
   type Association,
@@ -22,6 +21,7 @@ import core, {
   type Client,
   type Doc,
   type DocumentQuery,
+  type ModelDb,
   type Ref,
   type RefTo,
   type Space,
@@ -40,7 +40,6 @@ import {
   type Method,
   type NestedContext,
   type Process,
-  type ProcessContext,
   type ProcessFunction,
   type RelatedContext,
   type SelectedUserRequest,
@@ -52,6 +51,17 @@ import {
 import { showPopup } from '@hcengineering/ui'
 import { type AttributeCategory } from '@hcengineering/view'
 import process from './plugin'
+
+export function isTypeEqual (toCheck: Type<any> | undefined, attr: Type<any>): boolean {
+  const skip = ['label', 'icon', 'hidden', 'readonly']
+  if (toCheck === undefined) return true
+  if (Object.keys(attr).length !== Object.keys(toCheck).length) return true
+  for (const key of Object.keys(attr)) {
+    if (skip.includes(key)) continue
+    if (toCheck[key as keyof Type<any>] !== attr[key as keyof Type<any>]) return false
+  }
+  return true
+}
 
 export function generateContextId (): ContextId {
   return generateId() as string as ContextId
@@ -308,13 +318,17 @@ export function showDoneQuery (value: any, query: DocumentQuery<Doc>): DocumentQ
 
 export async function continueExecution (value: Execution): Promise<void> {
   if (value.error == null) return
-  const transition = value.error[0].transition
-  if (transition == null) return
   const client = getClient()
-  const _transition = client.getModel().findObject(transition)
-  if (_transition === undefined) return
-  const targetState = _transition.to
-  const context = targetState == null ? value.context : await getNextStateUserInput(value, targetState, value.context)
+  let context = value.context
+  const transition = value.error[0].transition
+  if (transition == null) {
+    context = await newExecutionUserInput(value.process, context)
+  } else {
+    const _transition = client.getModel().findObject(transition)
+    if (_transition === undefined) return
+    const targetState = _transition.to
+    context = targetState == null ? value.context : await getNextStateUserInput(value, targetState, value.context)
+  }
   await client.update(value, { status: ExecutionStatus.Active, context })
 }
 
@@ -434,12 +448,6 @@ export function getToDoEndAction (prevState: State): Step<Doc> {
   return endAction
 }
 
-export async function addProcessContext (process: Process, context: ProcessContext, id: ContextId): Promise<void> {
-  const client = getClient()
-  process.context[id] = context
-  await client.update(process, { context: process.context })
-}
-
 export async function requestResult (
   txop: TxOperations,
   execution: Execution,
@@ -452,15 +460,20 @@ export async function requestResult (
   for (const action of state.actions) {
     if (action.result == null) continue
     const promise = new Promise<void>((resolve, reject) => {
-      showPopup(process.component.ResultInput, { type: action.result?.type }, undefined, (res) => {
-        if (action.result?._id === undefined) return
-        if (res?.value !== undefined) {
-          context[action.result._id] = res.value
-          resolve()
-        } else {
-          reject(new PlatformError(new Status(Severity.ERROR, process.error.ResultNotProvided, {})))
+      showPopup(
+        process.component.ResultInput,
+        { type: action.result?.type, name: action.result?.name },
+        undefined,
+        (res) => {
+          if (action.result?._id === undefined) return
+          if (res?.value !== undefined) {
+            context[action.result._id] = res.value
+            resolve()
+          } else {
+            reject(new PlatformError(new Status(Severity.ERROR, process.error.ResultNotProvided, {})))
+          }
         }
-      })
+      )
     })
     await promise
     await txop.update(execution, {

@@ -16,13 +16,16 @@
 import { Request, Response } from 'express'
 import { MeasureContext } from '@hcengineering/core'
 import { createMessages } from '@hcengineering/mail-common'
-import { type MtaMessage, handleMtaHook } from '../handlerMta'
-import * as client from '../client'
 import { createRestTxOperations } from '@hcengineering/api-client'
+
+import { handleMtaHook } from '../handlerMta'
+import * as client from '../client'
+import { type MtaMessage } from '../types'
 
 // Mock dependencies
 jest.mock('@hcengineering/mail-common', () => ({
-  createMessages: jest.fn()
+  createMessages: jest.fn(),
+  getProducer: jest.fn().mockReturnValue({})
 }))
 
 jest.mock('../client', () => ({
@@ -177,6 +180,7 @@ describe('handleMtaHook', () => {
       mockCtx,
       mockTxOperations, // This should be the TxOperations mock, not kvsClient
       {}, // This should be the KeyValueClient mock
+      {},
       client.mailServiceToken,
       mockLoginInfo, // Added workspace login info
       expect.objectContaining({
@@ -221,6 +225,7 @@ describe('handleMtaHook', () => {
       mockCtx,
       mockTxOperations,
       {},
+      {},
       client.mailServiceToken,
       mockLoginInfo,
       expect.objectContaining({
@@ -245,6 +250,7 @@ describe('handleMtaHook', () => {
       client.baseConfig,
       mockCtx,
       mockTxOperations,
+      {},
       {},
       client.mailServiceToken,
       mockLoginInfo,
@@ -275,6 +281,7 @@ describe('handleMtaHook', () => {
       mockCtx,
       mockTxOperations,
       {},
+      {},
       client.mailServiceToken,
       mockLoginInfo,
       expect.objectContaining({
@@ -298,6 +305,7 @@ describe('handleMtaHook', () => {
       client.baseConfig,
       mockCtx,
       mockTxOperations,
+      {},
       {},
       client.mailServiceToken,
       mockLoginInfo,
@@ -326,6 +334,7 @@ describe('handleMtaHook', () => {
       client.baseConfig,
       mockCtx,
       mockTxOperations,
+      {},
       {},
       client.mailServiceToken,
       mockLoginInfo,
@@ -381,4 +390,96 @@ describe('handleMtaHook', () => {
       }
     }
   }
+
+  it('should process HTML email correctly', async () => {
+    // Mock request with HTML content
+    const htmlContent = '<html><body><h1>Hello</h1><p>This is an <b>HTML</b> test email</p></body></html>'
+    mockReq = {
+      headers: { 'x-hook-token': 'test-hook-token' },
+      body: createValidMtaMessage('sender@example.com', ['recipient@example.com'], {
+        subject: 'HTML Test Subject',
+        contentType: 'text/html; charset=utf-8',
+        content: htmlContent
+      })
+    }
+
+    await handleMtaHook(mockReq as Request, mockRes as Response, mockCtx)
+
+    // Should return 200
+    expect(mockStatus).toHaveBeenCalledWith(200)
+    expect(mockSend).toHaveBeenCalledWith({ action: 'accept' })
+
+    // Should process the message with both HTML and text content
+    expect(createMessages).toHaveBeenCalledWith(
+      client.baseConfig,
+      mockCtx,
+      mockTxOperations,
+      {},
+      {},
+      client.mailServiceToken,
+      mockLoginInfo,
+      expect.objectContaining({
+        mailId: expect.any(String),
+        from: { email: 'sender@example.com', firstName: 'sender', lastName: 'example.com' },
+        to: [{ email: 'recipient@example.com', firstName: 'recipient', lastName: 'example.com' }],
+        subject: 'HTML Test Subject',
+        content: htmlContent,
+        incoming: true
+      }),
+      [] // attachments
+    )
+  })
+
+  it('should process email plain/text content header', async () => {
+    // Create a multipart email with both text and HTML
+    const textContent = 'This is the plain text version'
+
+    // Mock message with multipart content by setting multiple headers and contents
+    const message = {
+      envelope: {
+        from: { address: 'sender@example.com' },
+        to: [{ address: 'recipient@example.com' }]
+      },
+      message: {
+        headers: [
+          ['Content-Type', 'multipart/alternative; boundary="boundary-string"'],
+          ['Subject', 'Test Email'],
+          ['From', 'Sender <sender@example.com>'],
+          ['To', 'Recipient <recipient@example.com>']
+        ],
+        contents: `Content-Type: text/plain; charset=utf-8 \r\n${textContent}`
+      }
+    }
+
+    mockReq = {
+      headers: { 'x-hook-token': 'test-hook-token' },
+      body: message
+    }
+
+    await handleMtaHook(mockReq as Request, mockRes as Response, mockCtx)
+
+    // Should return 200
+    expect(mockStatus).toHaveBeenCalledWith(200)
+    expect(mockSend).toHaveBeenCalledWith({ action: 'accept' })
+
+    // Should process the message with both content types
+    expect(createMessages).toHaveBeenCalledWith(
+      client.baseConfig,
+      mockCtx,
+      mockTxOperations,
+      {},
+      {},
+      client.mailServiceToken,
+      mockLoginInfo,
+      expect.objectContaining({
+        mailId: expect.any(String),
+        from: { email: 'sender@example.com', firstName: 'Sender', lastName: 'example.com' },
+        to: [{ email: 'recipient@example.com', firstName: 'Recipient', lastName: 'example.com' }],
+        subject: 'Test Email',
+        content: textContent,
+        incoming: true
+      }),
+      []
+    )
+  })
 })

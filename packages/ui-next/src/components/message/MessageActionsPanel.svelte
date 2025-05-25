@@ -14,7 +14,7 @@
 -->
 
 <script lang="ts">
-  import { showPopup } from '@hcengineering/ui'
+  import ui, { showPopup, ButtonIcon, IconDelete } from '@hcengineering/ui'
   import { Message } from '@hcengineering/communication-types'
   import { createEventDispatcher } from 'svelte'
   import emojiPlugin from '@hcengineering/emoji'
@@ -24,13 +24,13 @@
   import uiNext from '../../plugin'
   import { toggleReaction } from '../../utils'
   import { Action } from '../../types'
-  import Button from '../Button.svelte'
 
   export let message: Message
   export let editable: boolean = true
   export let canReply: boolean = true
   export let canReact: boolean = true
   export let isOpened: boolean = false
+  export let canRemove: boolean = false
 
   const dispatch = createEventDispatcher()
 
@@ -90,6 +90,18 @@
       })
     }
 
+    if (canRemove) {
+      actions.push({
+        id: 'remove',
+        label: ui.string.Remove,
+        icon: IconDelete,
+        order: 999,
+        action: () => {
+          dispatch('remove')
+        }
+      })
+    }
+
     return actions.sort((a, b) => a.order - b.order)
   }
 
@@ -98,7 +110,14 @@
 
 <div class="message-actions-panel">
   {#each actions as action (action.id)}
-    <Button icon={action.icon} iconSize="medium" tooltip={{ label: action.label }} on:click={action.action} />
+    <ButtonIcon
+      icon={action.icon}
+      iconSize="small"
+      size="small"
+      kind="tertiary"
+      tooltip={{ label: action.label, direction: 'bottom' }}
+      on:click={action.action}
+    />
   {/each}
 </div>
 
@@ -107,7 +126,7 @@
     display: flex;
     background: var(--next-background-color);
     border: 1px solid var(--next-border-color);
-    padding: 0.25rem;
+    padding: 0.125rem;
     border-radius: 0.5rem;
     gap: 0.25rem;
     box-shadow: 0.5rem 0.75rem 1rem 0.25rem var(--color-huly-dark-grey-25);

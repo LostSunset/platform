@@ -365,7 +365,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
     const statuses = await this.provider.getStatuses(type?._id)
 
     const assignees = await this.getAssignees(pullRequestExternal)
-    const reviewers: PersonId[] = await this.getReviewers(pullRequestExternal)
+    const reviewers = await this.getPersonsFromId(await this.getReviewers(pullRequestExternal))
 
     const latestReviews: LastReviewState[] = []
 
@@ -386,7 +386,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
         this.stripGuestLink
       ),
       assignee: assignees[0] ?? null,
-      reviewers: reviewers.map((it: any) => it.person),
+      reviewers,
       draft: pullRequestExternal.isDraft,
       head: pullRequestExternal.headRef,
       base: pullRequestExternal.baseRef,
@@ -728,7 +728,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
     if (allResolved) {
       // We need to complete or remove todo, in case all are resolved.
       if (!Array.from(approvedOrChangesRequested.values()).includes('CHANGES_REQUESTED')) {
-        const todos = allTodos.filter((it) => it.purpose === 'fix')
+        const todos = allTodos.filter((it) => it.purpose === 'fix' && it.doneOn == null)
         for (const t of todos) {
           await this.markDoneOrDeleteTodo(t)
         }
@@ -853,7 +853,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
 
   private async markDoneOrDeleteTodo (td: WithLookup<GithubTodo>): Promise<void> {
     // Let's mark as done in any case
-    await this.client.update(td, {
+    await this.client.diffUpdate(td, {
       doneOn: Date.now()
     })
   }

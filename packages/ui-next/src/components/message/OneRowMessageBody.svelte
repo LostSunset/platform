@@ -14,18 +14,20 @@
 -->
 
 <script lang="ts">
-  import { PersonPreviewProvider } from '@hcengineering/contact-resources'
+  import { PersonPreviewProvider, Avatar } from '@hcengineering/contact-resources'
   import { formatName, Person } from '@hcengineering/contact'
-  import { Message } from '@hcengineering/communication-types'
+  import { Message, MessageType } from '@hcengineering/communication-types'
   import { Card } from '@hcengineering/card'
+  import { IconDelete } from '@hcengineering/ui'
 
   import MessageContentViewer from './MessageContentViewer.svelte'
-  import Avatar from '../Avatar.svelte'
-  import { AvatarSize } from '../../types'
+  import MessageFooter from './MessageFooter.svelte'
 
   export let card: Card
   export let author: Person | undefined
   export let message: Message
+  export let replies = true
+  export let hideAvatar: boolean = false
 
   function formatDate (date: Date): string {
     return date.toLocaleTimeString('default', {
@@ -33,35 +35,51 @@
       minute: 'numeric'
     })
   }
+
+  let isDeleted = false
+  $: isDeleted = (message.type === MessageType.Thread && message.thread == null) || message.removed
 </script>
 
 <div class="message__body">
-  <div class="message__avatar">
-    <PersonPreviewProvider value={author}>
-      <Avatar name={author?.name} avatar={author} size={AvatarSize.XXSmall} />
-    </PersonPreviewProvider>
-  </div>
-  <div class="message__header">
-    <PersonPreviewProvider value={author}>
-      <div class="message__username">
-        {formatName(author?.name ?? '')}
-      </div>
-    </PersonPreviewProvider>
-    <div class="message__date">
-      {formatDate(message.created)}
+  {#if !hideAvatar}
+    <div class="message__avatar">
+      {#if !isDeleted}
+        <PersonPreviewProvider value={author}>
+          <Avatar name={author?.name} person={author} size="x-small" />
+        </PersonPreviewProvider>
+      {:else}
+        <Avatar icon={IconDelete} size="x-small" />
+      {/if}
     </div>
-  </div>
+  {/if}
+  {#if !isDeleted}
+    <div class="message__header">
+      <PersonPreviewProvider value={author}>
+        <div class="message__username">
+          {formatName(author?.name ?? '')}
+        </div>
+      </PersonPreviewProvider>
+      <div class="message__date">
+        {formatDate(message.created)}
+      </div>
+    </div>
+  {/if}
 
   <div class="message__text">
     <MessageContentViewer {message} {card} />
   </div>
 </div>
+{#if !isDeleted}
+  <div class="message__footer">
+    <MessageFooter {message} {replies} />
+  </div>
+{/if}
 
 <style lang="scss">
   .message__body {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 1rem;
     min-width: 0;
     overflow: hidden;
   }
@@ -70,8 +88,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    align-self: stretch;
-    width: 2rem;
+    justify-content: center;
+    width: 2.5rem;
   }
 
   .message__header {
@@ -84,6 +102,7 @@
     color: var(--next-text-color-primary);
     font-size: 0.875rem;
     font-weight: 500;
+    white-space: nowrap;
   }
 
   .message__date {
@@ -103,5 +122,11 @@
     min-width: 0;
     max-width: 100%;
     user-select: text;
+  }
+
+  .message__footer {
+    display: flex;
+    flex-direction: column;
+    margin-left: 3.5rem;
   }
 </style>
