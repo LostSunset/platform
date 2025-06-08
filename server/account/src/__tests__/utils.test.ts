@@ -16,14 +16,14 @@
 import {
   AccountRole,
   type AccountUuid,
-  Branding,
-  MeasureContext,
-  Person,
-  PersonId,
-  PersonUuid,
+  type Branding,
+  type MeasureContext,
+  type Person,
+  type PersonId,
+  type PersonUuid,
   SocialIdType,
   systemAccountUuid,
-  WorkspaceUuid
+  type WorkspaceUuid
 } from '@hcengineering/core'
 import {
   generateWorkspaceUrl,
@@ -72,7 +72,7 @@ import platform, { getMetadata, PlatformError, Severity, Status } from '@hcengin
 import { decodeTokenVerbose, generateToken, TokenError } from '@hcengineering/server-token'
 import { randomBytes } from 'crypto'
 
-import { AccountDB, AccountEventType, Workspace } from '../types'
+import { type AccountDB, AccountEventType, type Workspace } from '../types'
 import { accountPlugin } from '../plugin'
 
 // Mock platform with minimum required functionality
@@ -565,13 +565,17 @@ describe('account utils', () => {
     test('should handle PlatformError', async () => {
       const errorStatus = new Status(Severity.ERROR, 'test-error' as any, {})
       const mockMethod = jest.fn().mockRejectedValue(new PlatformError(errorStatus))
+      Object.defineProperty(mockMethod, 'name', { value: 'mockAccMethod' })
       const wrappedMethod = wrap(mockMethod)
       const request = { id: 'req1', params: [] }
 
       const result = await wrappedMethod(mockCtx, mockDb, mockBranding, request, 'token')
 
       expect(result).toEqual({ error: errorStatus })
-      expect(mockCtx.error).toHaveBeenCalledWith('error', { status: errorStatus })
+      expect(mockCtx.error).toHaveBeenCalledWith('Error while processing account method', {
+        status: errorStatus,
+        method: 'mockAccMethod'
+      })
     })
 
     test('should handle TokenError', async () => {
@@ -589,15 +593,17 @@ describe('account utils', () => {
     test('should handle internal server error', async () => {
       const error = new Error('unexpected error')
       const mockMethod = jest.fn().mockRejectedValue(error)
+      Object.defineProperty(mockMethod, 'name', { value: 'mockAccMethod' })
       const wrappedMethod = wrap(mockMethod)
       const request = { id: 'req1', params: [] }
 
       const result = await wrappedMethod(mockCtx, mockDb, mockBranding, request, 'token')
 
       expect(result.error.code).toBe(platform.status.InternalServerError)
-      expect(mockCtx.error).toHaveBeenCalledWith('error', {
+      expect(mockCtx.error).toHaveBeenCalledWith('Error while processing account method', {
         status: expect.any(Status),
-        err: error
+        origErr: error,
+        method: 'mockAccMethod'
       })
     })
 
@@ -1098,6 +1104,7 @@ describe('account utils', () => {
       const mockWorkspace = {
         uuid: 'workspace-uuid' as WorkspaceUuid,
         url: workspaceUrl,
+        allowReadOnlyGuest: false,
         region: 'us',
         dataId: 'test-data-id'
       }
@@ -1936,7 +1943,8 @@ describe('account utils', () => {
     const mockWorkspace: Workspace = {
       uuid: 'test-workspace-uuid' as WorkspaceUuid,
       name: 'Test Workspace',
-      url: 'test-workspace'
+      url: 'test-workspace',
+      allowReadOnlyGuest: false
     }
 
     test('should generate invite email content', async () => {

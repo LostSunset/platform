@@ -22,69 +22,68 @@ import { Analytics } from '@hcengineering/analytics'
 import { type ServerApi as CommunicationApi } from '@hcengineering/communication-sdk-types'
 import core, {
   AccountRole,
+  type AccountUuid,
+  type Branding,
+  type BrandingMap,
   cutObjectArray,
-  Data,
+  type Data,
   generateId,
   isArchivingMode,
   isMigrationMode,
   isRestoringMode,
   isWorkspaceCreating,
+  type MeasureContext,
+  type PersonId,
   pickPrimarySocialId,
   platformNow,
   platformNowDiff,
   SocialIdType,
   systemAccountUuid,
+  type Tx,
   TxFactory,
-  Version,
+  type TxWorkspaceEvent,
+  type Version,
   versionToString,
   withContext,
-  WorkspaceEvent,
-  type AccountUuid,
-  type Branding,
-  type BrandingMap,
-  type MeasureContext,
-  type PersonId,
-  type Tx,
-  type TxWorkspaceEvent,
   type WorkspaceDataId,
+  WorkspaceEvent,
+  type WorkspaceIds,
   type WorkspaceInfoWithStatus,
   type WorkspaceUuid
 } from '@hcengineering/core'
-import { unknownError, type Status } from '@hcengineering/platform'
+import { type Status, unknownError } from '@hcengineering/platform'
 import {
-  SlidingWindowRateLimitter,
   type HelloRequest,
   type HelloResponse,
   type RateLimitInfo,
   type Request,
-  type Response
+  type Response,
+  SlidingWindowRateLimitter
 } from '@hcengineering/rpc'
 import {
-  CommunicationApiFactory,
-  LOGGING_ENABLED,
-  pingConst,
-  Pipeline,
-  PipelineFactory,
-  QueueTopic,
-  QueueUserMessage,
-  SessionManager,
-  userEvents,
-  workspaceEvents,
   type AddSessionResponse,
   type ClientSessionCtx,
+  type CommunicationApiFactory,
   type ConnectionSocket,
   type GetWorkspaceResponse,
+  LOGGING_ENABLED,
+  pingConst,
+  type Pipeline,
+  type PipelineFactory,
   type PlatformQueue,
   type PlatformQueueProducer,
+  QueueTopic,
+  type QueueUserMessage,
   type QueueWorkspaceMessage,
   type Session,
+  type SessionManager,
+  userEvents,
   type UserStatistics,
+  workspaceEvents,
   type WorkspaceStatistics
 } from '@hcengineering/server-core'
 import { generateToken, type Token } from '@hcengineering/server-token'
-import { Workspace, type PipelinePair } from './workspace'
-
-import { WorkspaceIds } from '@hcengineering/core'
+import { type PipelinePair, Workspace } from './workspace'
 import { ClientSession } from './client'
 import { sendResponse } from './utils'
 
@@ -796,7 +795,8 @@ export class TSessionManager implements SessionManager {
   ): Promise<void> {
     try {
       const user = session.getUser()
-      if (user === undefined) return
+      const userRawAccount = session.getRawAccount()
+      if (user === undefined || userRawAccount.role === AccountRole.ReadOnlyGuest) return
 
       const clientCtx: ClientSessionCtx = {
         requestId: undefined,
@@ -814,7 +814,7 @@ export class TSessionManager implements SessionManager {
       }
 
       const status = (await session.findAllRaw(clientCtx, core.class.UserStatus, { user }, { limit: 1 }))[0]
-      const txFactory = new TxFactory(session.getRawAccount().primarySocialId, true)
+      const txFactory = new TxFactory(userRawAccount.primarySocialId, true)
       if (status === undefined) {
         const tx = txFactory.createTxCreateDoc(core.class.UserStatus, core.space.Space, {
           online,
@@ -1211,7 +1211,7 @@ export class TSessionManager implements SessionManager {
     requestCtx: MeasureContext,
     service: S,
     ws: ConnectionSocket,
-    operation: (ctx: ClientSessionCtx) => Promise<void>
+    operation: (ctx: ClientSessionCtx, rateLimit: RateLimitInfo | undefined) => Promise<void>
   ): Promise<RateLimitInfo | undefined> {
     const rateLimitStatus = this.limitter.checkRateLimit(service.getUser())
     // If remaining is 0, rate limit is exceeded
@@ -1252,7 +1252,7 @@ export class TSessionManager implements SessionManager {
             ws,
             rateLimitStatus
           )
-          await operation(uctx)
+          await operation(uctx, rateLimitStatus)
         })
       } catch (err: any) {
         Analytics.handleError(err)

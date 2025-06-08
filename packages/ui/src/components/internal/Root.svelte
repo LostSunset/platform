@@ -44,12 +44,14 @@
 
   onMount(() => {
     document.addEventListener('visibilitychange', visibilityChangeHandler)
+    window.addEventListener('wheel', handleWindowFocus)
     window.addEventListener('focus', handleWindowFocus)
     window.addEventListener('blur', handleWindowBlur)
   })
 
   onDestroy(() => {
     document.removeEventListener('visibilitychange', visibilityChangeHandler)
+    window.removeEventListener('wheel', handleWindowFocus)
     window.removeEventListener('focus', handleWindowFocus)
     window.removeEventListener('blur', handleWindowBlur)
   })
@@ -92,12 +94,17 @@
   )
 
   let status = OK
+  let readonlyAccount = false
   let maintenanceTime = -1
 
   addEventListener(PlatformEvent, async (_event, _status: Status) => {
     if (_status.code === platform.status.MaintenanceWarning) {
       maintenanceTime = _status.params.time
     } else {
+      if (readonlyAccount) return
+      if (_status.code === platform.status.ReadOnlyAccount) {
+        readonlyAccount = true
+      }
       status = _status
     }
   })

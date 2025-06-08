@@ -278,7 +278,8 @@ async function OnCardRemove (ctx: TxRemoveDoc<Card>[], control: TriggerControl):
   }
 
   void control.communicationApi?.event(
-    { account: systemAccount },
+    // TODO: We should decide what to do with communications package and remove this workaround
+    { account: systemAccount as any },
     {
       type: CardRequestEventType.RemoveCard,
       card: removedCard._id
@@ -347,7 +348,8 @@ async function OnCardUpdate (ctx: TxUpdateDoc<Card>[], control: TriggerControl):
   }
   if ((updateTx.operations as any)._class !== undefined) {
     void control.communicationApi?.event(
-      { account: systemAccount },
+      // TODO: We should decide what to do with communications package and remove this workaround
+      { account: systemAccount as any },
       {
         type: CardRequestEventType.UpdateCardType,
         card: doc._id,
@@ -401,6 +403,21 @@ async function OnCardCreate (ctx: TxCreateDoc<Card>[], control: TriggerControl):
           }
         })
       )
+      if ((doc.parentInfo?.length ?? 0) === 0) {
+        const parentInfo = [
+          ...(parent.parentInfo ?? []),
+          {
+            _id: parent._id,
+            _class: parent._class,
+            title: parent.title
+          }
+        ]
+        res.push(
+          control.txFactory.createTxUpdateDoc(doc._class, doc.space, doc._id, {
+            parentInfo
+          })
+        )
+      }
     }
   }
 
@@ -432,7 +449,8 @@ async function updateCollaborators (control: TriggerControl, ctx: TxCreateDoc<Ca
 
     if (collaborators.length === 0) continue
     void communicationApi.event(
-      { account: systemAccount },
+      // TODO: We should decide what to do with communications package and remove this workaround
+      { account: systemAccount as any },
       {
         type: NotificationRequestEventType.AddCollaborators,
         card: tx.objectId,

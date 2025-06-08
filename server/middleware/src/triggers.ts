@@ -14,7 +14,6 @@
 //
 
 import core, {
-  type PersonId,
   type AttachedDoc,
   type Class,
   ClassifierKind,
@@ -25,10 +24,11 @@ import core, {
   type LowLevelStorage,
   type MeasureContext,
   type Mixin,
+  type PersonId,
   type Ref,
   type SessionData,
   type Tx,
-  TxCUD,
+  type TxCUD,
   TxFactory,
   type TxRemoveDoc,
   type TxUpdateDoc,
@@ -37,17 +37,20 @@ import core, {
   withContext
 } from '@hcengineering/core'
 import { PlatformError, getResource, unknownError } from '@hcengineering/platform'
-import type {
-  Middleware,
-  ObjectDDParticipant,
-  PipelineContext,
-  ServerFindOptions,
-  ServiceAdaptersManager,
-  StorageAdapter,
-  TriggerControl,
-  TxMiddlewareResult
+import serverCore, {
+  type Middleware,
+  type ObjectDDParticipant,
+  type PipelineContext,
+  type ServerFindOptions,
+  type ServiceAdaptersManager,
+  type StorageAdapter,
+  type TriggerControl,
+  type TxMiddlewareResult,
+  BaseMiddleware,
+  SessionDataImpl,
+  type SessionFindAll,
+  Triggers
 } from '@hcengineering/server-core'
-import serverCore, { BaseMiddleware, SessionDataImpl, SessionFindAll, Triggers } from '@hcengineering/server-core'
 import { filterBroadcastOnly } from './utils'
 
 /**
@@ -179,7 +182,7 @@ export class TriggersMiddleware extends BaseMiddleware implements Middleware {
     } else {
       ctx.contextData.asyncRequests = [
         ...(ctx.contextData.asyncRequests ?? []),
-        async () => {
+        async (ctx) => {
           // In case of async context, we execute both async and sync triggers as sync
           await this.processAsyncTriggers(ctx, triggerControl, findAll, txes, triggers)
         }

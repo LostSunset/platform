@@ -14,14 +14,14 @@
 //
 import {
   AccountRole,
-  Data,
-  Version,
+  type Data,
+  type Version,
   type AccountUuid,
   type WorkspaceMode,
   type WorkspaceUuid
 } from '@hcengineering/core'
 import { AccountPostgresDbCollection, PostgresAccountDB, PostgresDbCollection } from '../collections/postgres/postgres'
-import { Sql } from 'postgres'
+import { type Sql } from 'postgres'
 
 interface TestWorkspace {
   uuid: WorkspaceUuid
@@ -577,6 +577,7 @@ describe('PostgresAccountDB', () => {
             uuid: workspaceId,
             name: 'Test',
             url: 'test',
+            allowReadOnlyGuest: false,
             created_on: '1234567890000',
             status: {
               mode: 'active',
@@ -597,6 +598,7 @@ describe('PostgresAccountDB', () => {
           uuid: workspaceId,
           name: 'Test',
           url: 'test',
+          allowReadOnlyGuest: false,
           createdOn: 1234567890000,
           status: {
             mode: 'active',
@@ -660,8 +662,7 @@ describe('PostgresAccountDB', () => {
                AND (s.last_processing_time IS NULL OR s.last_processing_time < $1)
                AND (w.region IS NULL OR w.region = '')
                ORDER BY s.last_visit DESC
-               LIMIT 1
-               FOR UPDATE SKIP LOCKED`.replace(/\s+/g, ' ')
+               LIMIT 1`.replace(/\s+/g, ' ')
         )
         expect(mockClient.unsafe.mock.calls[0][1]).toEqual([NOW - processingTimeoutMs])
       })
@@ -719,8 +720,7 @@ describe('PostgresAccountDB', () => {
                AND (s.last_processing_time IS NULL OR s.last_processing_time < $5)
                AND (w.region IS NULL OR w.region = '')
                ORDER BY s.last_visit DESC
-               LIMIT 1
-               FOR UPDATE SKIP LOCKED`
+               LIMIT 1`
             .replace(/\s+/g, ' ')
             .replace(/\(\s/g, '(')
             .replace(/\s\)/g, ')')
@@ -791,8 +791,7 @@ describe('PostgresAccountDB', () => {
                AND (s.last_processing_time IS NULL OR s.last_processing_time < $5)
                AND (w.region IS NULL OR w.region = '')
                ORDER BY s.last_visit DESC
-               LIMIT 1
-               FOR UPDATE SKIP LOCKED`
+               LIMIT 1`
             .replace(/\s+/g, ' ')
             .replace(/\(\s/g, '(')
             .replace(/\s\)/g, ')')
@@ -881,8 +880,7 @@ describe('PostgresAccountDB', () => {
                AND (s.last_processing_time IS NULL OR s.last_processing_time < $5)
                AND (w.region IS NULL OR w.region = '')
                ORDER BY s.last_visit DESC
-               LIMIT 1
-               FOR UPDATE SKIP LOCKED`
+               LIMIT 1`
             .replace(/\s+/g, ' ')
             .replace(/\(\s/g, '(')
             .replace(/\s\)/g, ')')
@@ -934,8 +932,7 @@ describe('PostgresAccountDB', () => {
                AND (s.last_processing_time IS NULL OR s.last_processing_time < $1)
                AND region = $2
                ORDER BY s.last_visit DESC
-               LIMIT 1
-               FOR UPDATE SKIP LOCKED`
+               LIMIT 1`
             .replace(/\s+/g, ' ')
             .replace(/\(\s/g, '(')
             .replace(/\s\)/g, ')')

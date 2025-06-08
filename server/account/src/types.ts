@@ -13,15 +13,15 @@
 // limitations under the License.
 //
 import {
-  AccountRole,
-  BackupStatus,
-  Branding,
-  Data,
-  MeasureContext,
-  Timestamp,
-  Version,
-  WorkspaceMemberInfo,
-  WorkspaceMode,
+  type AccountRole,
+  type BackupStatus,
+  type Branding,
+  type Data,
+  type MeasureContext,
+  type Timestamp,
+  type Version,
+  type WorkspaceMemberInfo,
+  type WorkspaceMode,
   type AccountUuid,
   type Person as BasePerson,
   type PersonId,
@@ -106,6 +106,7 @@ export interface Workspace {
   uuid: WorkspaceUuid
   name: string
   url: string
+  allowReadOnlyGuest: boolean
   dataId?: WorkspaceDataId // Old workspace identifier. E.g. Database name in Mongo, bucket in R2, etc.
   branding?: string
   location?: Location
@@ -200,6 +201,7 @@ export interface AccountDB {
 
   init: () => Promise<void>
   createWorkspace: (data: WorkspaceData, status: WorkspaceStatusData) => Promise<WorkspaceUuid>
+  updateAllowReadOnlyGuests: (workspaceId: WorkspaceUuid, readOnlyGuestsAllowed: boolean) => Promise<void>
   assignWorkspace: (accountId: AccountUuid, workspaceId: WorkspaceUuid, role: AccountRole) => Promise<void>
   batchAssignWorkspace: (data: [AccountUuid, WorkspaceUuid, AccountRole][]) => Promise<void>
   updateWorkspaceRole: (accountId: AccountUuid, workspaceId: WorkspaceUuid, role: AccountRole) => Promise<void>
@@ -220,6 +222,7 @@ export interface AccountDB {
 }
 
 export interface DbCollection<T> {
+  exists: (query: Query<T>) => Promise<boolean>
   find: (query: Query<T>, sort?: Sort<T>, limit?: number) => Promise<T[]>
   findOne: (query: Query<T>) => Promise<T | null>
   insertOne: (data: Partial<T>) => Promise<any>

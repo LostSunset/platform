@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 
+import { MarkupNode } from '@hcengineering/text-core'
 import { markdownToMarkup, markupToMarkdown } from '..'
 import { isMarkdownsEquals } from '../compare'
 
@@ -773,6 +774,65 @@ Lorem ipsum dolor sit amet.
           }
         ]
       }
+    },
+    {
+      name: 'embed',
+      markdown: '<a href="http://localhost/embed" data-type="embed">http:&#x2F;&#x2F;localhost&#x2F;embed</a>',
+      markup: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'embed',
+                attrs: { src: 'http://localhost/embed' },
+                content: []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      name: 'embed-uri-escape',
+      markdown:
+        '<a href="http://localhost/embed%20spaces" data-type="embed">http:&#x2F;&#x2F;localhost&#x2F;embed spaces</a>',
+      markup: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'embed',
+                attrs: { src: 'http://localhost/embed spaces' },
+                content: []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      name: 'embed-html-escape',
+      markdown:
+        '<a href="http://localhost/embed%3Chtml%3E" data-type="embed">http:&#x2F;&#x2F;localhost&#x2F;embed&lt;html&gt;</a>',
+      markup: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'embed',
+                attrs: { src: 'http://localhost/embed<html>' },
+                content: []
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 
@@ -796,8 +856,65 @@ Lorem ipsum dolor sit amet.
   })
 })
 
+describe('markupToMarkdown', () => {
+  const tests: Array<{ name: string, markdown: string, markup: object }> = [
+    {
+      name: 'links',
+      markdown: `[Link](https://example.com)
+
+[Link with spaces](<https://example.com/with spaces>)
+
+[Link with spaces and braces](<https://example.com/\\<with spaces\\>>)`,
+      markup: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'Link',
+                marks: [{ type: 'link', attrs: { href: 'https://example.com' } }]
+              }
+            ]
+          },
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'Link with spaces',
+                marks: [{ type: 'link', attrs: { href: 'https://example.com/with spaces' } }]
+              }
+            ]
+          },
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'Link with spaces and braces',
+                marks: [{ type: 'link', attrs: { href: 'https://example.com/<with spaces>' } }]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+
+  describe('to markdown', () => {
+    tests.forEach(({ name, markdown, markup }) => {
+      it(name, () => {
+        const result = markupToMarkdown(markup as MarkupNode, options)
+        expect(result).toEqual(markdown)
+      })
+    })
+  })
+})
+
 describe('markdownToMarkup -> markupToMarkdown', () => {
-  const tests: Array<{ name: string, markdown: string }> = [
+  const tests: Array<{ name: string, markdown: string, alternate?: string }> = [
     { name: 'Italic', markdown: '*Asteriscs* and _Underscores_' },
     { name: 'Bold', markdown: '**Asteriscs** and __Underscores__' },
     { name: 'Bullet list with asteriscs', markdown: 'Asterisks :\r\n* Firstly\r\n* Secondly' },
@@ -818,6 +935,16 @@ describe('markdownToMarkup -> markupToMarkdown', () => {
     {
       name: 'Link',
       markdown: 'See [link](https://example.com)'
+    },
+    {
+      name: 'Link with spaces',
+      markdown: 'See [link](<https://example.com/with spaces>)',
+      alternate: 'See [link](https://example.com/with%20spaces)'
+    },
+    {
+      name: 'Link with spaces and braces',
+      markdown: 'See [link](<https://example.com/\\<with spaces\\>>)',
+      alternate: 'See [link](https://example.com/%3Cwith%20spaces%3E)'
     },
     {
       name: 'Codeblock',
@@ -842,11 +969,11 @@ describe('markdownToMarkup -> markupToMarkdown', () => {
     // }
   ]
 
-  tests.forEach(({ name, markdown }) => {
+  tests.forEach(({ name, markdown, alternate }) => {
     it(name, () => {
       const json = markdownToMarkup(markdown, options)
       const serialized = markupToMarkdown(json, options)
-      expect(serialized).toEqualMarkdown(markdown)
+      expect(serialized).toEqualMarkdown(alternate ?? markdown)
     })
   })
 })

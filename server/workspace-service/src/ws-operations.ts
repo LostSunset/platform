@@ -61,7 +61,9 @@ export async function createWorkspace (
   }
 
   const createPingHandle = setInterval(() => {
-    void handleWsEvent?.('ping', version, 0)
+    handleWsEvent?.('ping', version, 0).catch((err: any) => {
+      ctx.error('Error while updating progress', { origErr: err })
+    })
   }, 5000)
 
   try {
@@ -168,7 +170,8 @@ export async function createWorkspace (
 
       await handleWsEvent?.('create-done', version, 100, '')
     } catch (err: any) {
-      await handleWsEvent?.('ping', version, 0, `Create failed: ${err.message}`)
+      void handleWsEvent?.('ping', version, 0, `Create failed: ${err.message}`)
+      throw err
     } finally {
       await pipeline.close()
       await storageAdapter.close()
@@ -308,7 +311,9 @@ export async function upgradeWorkspaceWith (
   let progress = 0
 
   const updateProgressHandle = setInterval(() => {
-    void handleWsEvent?.('progress', version, progress)
+    handleWsEvent?.('progress', version, progress).catch((err: any) => {
+      ctx.error('Error while updating progress', { origErr: err })
+    })
   }, 5000)
 
   try {
@@ -350,7 +355,7 @@ export async function upgradeWorkspaceWith (
     await handleWsEvent?.('upgrade-done', version, 100, '')
   } catch (err: any) {
     ctx.error('upgrade-failed', { message: err.message })
-    await handleWsEvent?.('ping', version, 0, `Upgrade failed: ${err.message}`)
+    void handleWsEvent?.('ping', version, 0, `Upgrade failed: ${err.message}`)
     throw err
   } finally {
     clearInterval(updateProgressHandle)

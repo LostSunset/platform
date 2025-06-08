@@ -15,22 +15,22 @@
 
 import type { LoginInfoWithWorkspaces } from '@hcengineering/account-client'
 import {
-  RequestEvent as CommunicationEvent,
-  SessionData as CommunicationSession,
-  EventResult
+  type RequestEvent as CommunicationEvent,
+  type SessionData as CommunicationSession,
+  type EventResult
 } from '@hcengineering/communication-sdk-types'
 import {
-  FindCollaboratorsParams,
-  FindLabelsParams,
-  FindMessagesGroupsParams,
-  FindMessagesParams,
-  FindNotificationContextParams,
-  FindNotificationsParams,
-  Message,
-  MessagesGroup
+  type FindCollaboratorsParams,
+  type FindLabelsParams,
+  type FindMessagesGroupsParams,
+  type FindMessagesParams,
+  type FindNotificationContextParams,
+  type FindNotificationsParams,
+  type Message,
+  type MessagesGroup
 } from '@hcengineering/communication-types'
 import {
-  AccountUuid,
+  type AccountUuid,
   generateId,
   TxProcessor,
   type Account,
@@ -251,8 +251,8 @@ export class ClientSession implements Session {
       onEnd = useReserveContext ? ctx.pipeline.context.adapterManager?.reserveContext?.(cid) : undefined
       const handleAyncs = async (): Promise<void> => {
         try {
-          for (const r of (ctx.ctx.contextData as SessionData).asyncRequests ?? []) {
-            await r()
+          for (const r of asyncs) {
+            await r(ctx.ctx)
           }
         } finally {
           onEnd?.()
@@ -451,7 +451,8 @@ export class ClientSession implements Session {
   private getCommunicationCtx (): CommunicationSession {
     return {
       sessionId: this.sessionId,
-      account: this.account
+      // TODO: We should decide what to do with communications package and remove this workaround
+      account: this.account as any
     }
   }
 }

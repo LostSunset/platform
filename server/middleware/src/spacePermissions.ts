@@ -13,29 +13,30 @@
 // limitations under the License.
 //
 import core, {
-  Class,
-  Doc,
-  Permission,
-  Ref,
-  Role,
-  RolesAssignment,
-  Space,
-  SpaceType,
-  Tx,
-  TxApplyIf,
-  TxCUD,
-  TxCreateDoc,
-  TxMixin,
+  type Class,
+  type Doc,
+  type Permission,
+  type Ref,
+  type Role,
+  type RolesAssignment,
+  type Space,
+  type SpaceType,
+  type Tx,
+  type TxApplyIf,
+  type TxCUD,
+  type TxCreateDoc,
+  type TxMixin,
   TxProcessor,
-  TxRemoveDoc,
-  TxUpdateDoc,
-  TypedSpace,
+  type TxRemoveDoc,
+  type TxUpdateDoc,
+  type TypedSpace,
   type MeasureContext,
   type SessionData,
-  type AccountUuid
+  type AccountUuid,
+  AccountRole
 } from '@hcengineering/core'
 import platform, { PlatformError, Severity, Status } from '@hcengineering/platform'
-import { Middleware, TxMiddlewareResult, type PipelineContext } from '@hcengineering/server-core'
+import { type Middleware, type TxMiddlewareResult, type PipelineContext } from '@hcengineering/server-core'
 
 import { BaseMiddleware } from '@hcengineering/server-core'
 
@@ -337,6 +338,11 @@ export class SpacePermissionsMiddleware extends BaseMiddleware implements Middle
   }
 
   protected checkPermissions (ctx: MeasureContext, tx: Tx): void {
+    const account = ctx.contextData.account
+    if (account.role === AccountRole.ReadOnlyGuest) {
+      this.throwForbidden()
+    }
+
     if (tx._class === core.class.TxApplyIf) {
       const applyTx = tx as TxApplyIf
 

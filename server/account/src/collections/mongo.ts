@@ -19,9 +19,9 @@ import {
   type Version,
   type WorkspaceMemberInfo,
   type WorkspaceUuid,
-  AccountUuid,
+  type AccountUuid,
   buildSocialIdString,
-  SocialKey
+  type SocialKey
 } from '@hcengineering/core'
 import type {
   Collection,
@@ -129,6 +129,10 @@ implements DbCollection<T> {
     for (const { key, options } of indicesToEnsure) {
       await this.collection.createIndex(key, options)
     }
+  }
+
+  async exists (query: Query<T>): Promise<boolean> {
+    return (await this.findOne(query)) !== null
   }
 
   async find (query: Query<T>, sort?: Sort<T>, limit?: number): Promise<T[]> {
@@ -313,6 +317,10 @@ export class WorkspaceStatusMongoDbCollection implements DbCollection<WorkspaceS
     }
 
     return res
+  }
+
+  async exists (query: Query<WorkspaceStatus>): Promise<boolean> {
+    return await this.wsCollection.exists(this.toWsQuery(query))
   }
 
   async find (query: Query<WorkspaceStatus>, sort?: Sort<WorkspaceStatus>, limit?: number): Promise<WorkspaceStatus[]> {
@@ -579,6 +587,15 @@ export class MongoAccountDB implements AccountDB {
     })
 
     return res
+  }
+
+  async updateAllowReadOnlyGuests (workspaceId: WorkspaceUuid, readOnlyGuestsAllowed: boolean): Promise<void> {
+    await this.workspace.updateOne(
+      {
+        uuid: workspaceId
+      },
+      { allowReadOnlyGuest: readOnlyGuestsAllowed }
+    )
   }
 
   async getPendingWorkspace (

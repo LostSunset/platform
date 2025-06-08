@@ -114,12 +114,19 @@ export function configureNotifications (): void {
   // because we generate them on a client
   let initTimestamp = 0
   const notificationHistory = new Map<string, number>()
+  const newUnreadNotifications = 0
 
   addEventListener(workbench.event.NotifyConnection, async () => {
     client = getClient()
     const electronAPI: IPCMainExposed = (window as any).electron
 
     const inboxClient = InboxNotificationsClientImpl.getClient()
+
+    // TODO: FIX ME
+    // notificationsQuery.query({ read: false, limit: 1000 }, res => {
+    //   newUnreadNotifications = res.getResult().length
+    //   electronAPI.setBadge(prevUnViewdNotificationsCount + newUnreadNotifications)
+    // })
 
     async function handleNotifications (notificationsByContext: Map<Ref<DocNotifyContext>, InboxNotification[]>): Promise<void> {
       const inboxData = await getDisplayInboxData(notificationsByContext)
@@ -138,7 +145,7 @@ export function configureNotifications (): void {
 
       if (prevUnViewdNotificationsCount !== unViewedNotifications.length) {
         if (preferences.showUnreadCounter) {
-          electronAPI.setBadge(unViewedNotifications.length)
+          electronAPI.setBadge(unViewedNotifications.length + newUnreadNotifications)
         }
         if (preferences.bounceAppIcon) {
           electronAPI.dockBounce()
@@ -179,7 +186,7 @@ export function configureNotifications (): void {
         electronAPI.setBadge(0)
       }
       if (!preferences.showUnreadCounter && newPreferences.showUnreadCounter) {
-        electronAPI.setBadge(prevUnViewdNotificationsCount)
+        electronAPI.setBadge(prevUnViewdNotificationsCount + newUnreadNotifications)
       }
       preferences = newPreferences
     })

@@ -165,7 +165,7 @@ class Connection implements ClientConnection {
         sessionStorage.removeItem(sKey)
       }
       window.addEventListener('beforeunload', () => {
-        sessionStorage.setItem(sKey, sessionId as string)
+        sessionStorage.setItem(sKey, sessionId)
       })
     } else {
       this.sessionId = generateId()
@@ -310,6 +310,9 @@ class Connection implements ClientConnection {
       )
       this.currentRateLimit = resp.rateLimit
       if (this.currentRateLimit.remaining < this.currentRateLimit.limit / 3) {
+        if (this.slowDownTimer < 50) {
+          this.slowDownTimer += 50
+        }
         this.slowDownTimer++
       } else if (this.slowDownTimer > 0) {
         this.slowDownTimer--

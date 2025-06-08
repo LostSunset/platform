@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 /* eslint-disable @typescript-eslint/unbound-method */
-import { Collection, Db } from 'mongodb'
+import { type Collection, type Db } from 'mongodb'
 import {
   type WorkspaceMode,
   type WorkspaceUuid,
@@ -31,7 +31,7 @@ import {
   WorkspaceStatusMongoDbCollection,
   MongoAccountDB
 } from '../collections/mongo'
-import { WorkspaceInfoWithStatus, WorkspaceStatus } from '../types'
+import { type WorkspaceInfoWithStatus, type WorkspaceStatus } from '../types'
 
 interface TestWorkspace {
   _id?: string
@@ -1146,7 +1146,8 @@ describe('MongoAccountDB', () => {
       it('should create workspace and status', async () => {
         const workspaceData = {
           name: 'New Workspace',
-          url: 'new-workspace'
+          url: 'new-workspace',
+          allowReadOnlyGuest: false
         }
         const statusData = {
           mode: 'active' as const,

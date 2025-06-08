@@ -14,10 +14,10 @@
 //
 
 import type { Account, AccountUuid, Doc, Domain, PersonId, Ref } from './classes'
-import { MeasureContext } from './measurements'
-import { DocumentQuery, FindOptions } from './storage'
+import { type MeasureContext } from './measurements'
+import { type DocumentQuery, type FindOptions } from './storage'
 import type { DocumentUpdate, Tx } from './tx'
-import { WorkspaceIds } from './utils'
+import { type WorkspaceIds } from './utils'
 
 /**
  * @public
@@ -53,7 +53,7 @@ export interface SessionData {
   workspace: WorkspaceIds
   socialStringsToUsers: Map<PersonId, AccountUuid>
 
-  asyncRequests?: (() => Promise<void>)[]
+  asyncRequests?: ((ctx: MeasureContext) => Promise<void>)[]
 }
 
 /**
