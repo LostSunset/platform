@@ -99,11 +99,13 @@
         "SERVER_PROVIDER": "ws",
         "MODEL_VERSION": "0.7.110",
         // "VERSION": "0.6.289",
+        "COMMUNICATION_API_ENABLED": "true",
         "ELASTIC_INDEX_NAME": "local_storage_index",
         "UPLOAD_URL": "/files",
         "AI_BOT_URL": "http://localhost:4010",
         "STATS_URL": "http://huly.local:4900",
-        "QUEUE_CONFIG": "localhost:19092"
+        "QUEUE_CONFIG": "localhost:19092",
+        "FILES_URL": "http://huly.local:4030/blob/:workspace/:blobId/:filename"
       },
       "runtimeArgs": ["--nolazy", "-r", "ts-node/register"],
       "runtimeVersion": "20",
@@ -765,12 +767,26 @@
         "BUCKETS": "blobs,eu|http://localhost:9000?accessKey=minioadmin&secretKey=minioadmin",
         "ACCOUNTS_URL": "http://localhost:3000",
         "STATS_URL": "http://huly.local:4900",
-        "STREAM_URL": "http://huly.local:1080/recording"
+        "QUEUE_CONFIG": "localhost:19092"
       },
       "runtimeArgs": ["--nolazy", "-r", "ts-node/register"],
       "runtimeVersion": "20",
       "sourceMaps": true,
       "cwd": "${workspaceRoot}/services/datalake/pod-datalake"
+    },
+    {
+      "name": "Debug media",
+      "type": "node",
+      "request": "launch",
+      "args": ["src/index.ts"],
+      "env": {
+        "SECRET": "secret",
+        "QUEUE_CONFIG": "localhost:19092"
+      },
+      "runtimeArgs": ["--nolazy", "-r", "ts-node/register"],
+      "runtimeVersion": "20",
+      "sourceMaps": true,
+      "cwd": "${workspaceRoot}/pods/media"
     },
     {
       "type": "chrome",
