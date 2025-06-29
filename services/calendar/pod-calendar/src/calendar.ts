@@ -15,17 +15,24 @@
 
 import { AccountClient } from '@hcengineering/account-client'
 import calendar, { Event, ExternalCalendar, ReccuringEvent, ReccuringInstance } from '@hcengineering/calendar'
-import { Client, Doc, MeasureContext, Mixin, Ref, TxOperations } from '@hcengineering/core'
-import { htmlToMarkup, jsonToHTML, markupToJSON } from '@hcengineering/text'
+import { Client, MeasureContext, Ref, TxOperations } from '@hcengineering/core'
+import { jsonToHTML, markupToJSON } from '@hcengineering/text'
 import { deepEqual } from 'fast-equals'
 import { OAuth2Client } from 'google-auth-library'
 import { calendar_v3 } from 'googleapis'
-import { getRateLimitter, RateLimiter } from './rateLimiter'
-import { IncomingSyncManager } from './sync'
-import { CALENDAR_INTEGRATION, type Token } from './types'
-import { encodeReccuring, getGoogleClient, removeIntegrationSecret, setCredentials } from './utils'
-import type { WorkspaceClient } from './workspaceClient'
 import { removeUserByEmail } from './kvsUtils'
+import { getRateLimitter, RateLimiter } from './rateLimiter'
+import { CALENDAR_INTEGRATION, type Token } from './types'
+import {
+  convertDate,
+  encodeReccuring,
+  getGoogleClient,
+  getMixinFields,
+  getTimezone,
+  removeIntegrationSecret,
+  setCredentials
+} from './utils'
+import type { WorkspaceClient } from './workspaceClient'
 
 export class CalendarClient {
   private readonly calendar: calendar_v3.Calendar
@@ -67,21 +74,6 @@ export class CalendarClient {
       return
     }
     return calendarClient
-  }
-
-  async startSync (): Promise<void> {
-    try {
-      await IncomingSyncManager.sync(
-        this.ctx,
-        this.accountClient,
-        this.client,
-        this.user,
-        this.user.email,
-        this.calendar
-      )
-    } catch (err) {
-      this.ctx.error('Start sync error', { workspace: this.user.workspace, user: this.user.userId, err })
-    }
   }
 
   private areDatesEqual (first: calendar_v3.Schema$EventDateTime, second: calendar_v3.Schema$EventDateTime): boolean {
@@ -182,17 +174,6 @@ export class CalendarClient {
     }
   }
 
-  async removeEvent (event: Event): Promise<void> {
-    try {
-      const _calendar = this.workspace.calendarsById.get(event.calendar as Ref<ExternalCalendar>)
-      if (_calendar !== undefined) {
-        await this.remove(event.eventId, _calendar.externalId)
-      }
-    } catch (err) {
-      console.error('Remove event error', this.user.workspace, this.user.userId, err)
-    }
-  }
-
   async syncMyEvent (event: Event): Promise<void> {
     if (event.access === 'owner' || event.access === 'writer') {
       try {
@@ -247,24 +228,6 @@ export class CalendarClient {
     return false
   }
 
-  private getMixinFields (event: Event): Record<string, any> {
-    const res = {}
-    const h = this.client.getHierarchy()
-    for (const [k, v] of Object.entries(event)) {
-      if (typeof v === 'object' && h.isMixin(k as Ref<Mixin<Doc>>)) {
-        for (const [key, value] of Object.entries(v)) {
-          if (value !== undefined) {
-            const obj = (res as any)[k] ?? {}
-            obj[key] = value
-            ;(res as any)[k] = obj
-          }
-        }
-      }
-    }
-
-    return res
-  }
-
   private convertBody (event: Event): calendar_v3.Schema$Event {
     const res: calendar_v3.Schema$Event = {
       start: convertDate(event.date, event.allDay, getTimezone(event)),
@@ -286,7 +249,7 @@ export class CalendarClient {
         }
       }
     }
-    const mixin = this.getMixinFields(event)
+    const mixin = getMixinFields(this.client.getHierarchy(), event)
     if (Object.keys(mixin).length > 0) {
       res.extendedProperties = {
         ...res.extendedProperties,
@@ -348,8 +311,8 @@ export class CalendarClient {
         res = true
       }
     }
-    const description = htmlToMarkup(event.description ?? '')
-    if (current.description !== description) {
+    const description = jsonToHTML(markupToJSON(current.description))
+    if ((event.description ?? '') !== description) {
       res = true
       event.description = description
     }
@@ -400,14 +363,4 @@ export class CalendarClient {
     }
     return Array.from(res)
   }
-}
-
-function convertDate (value: number, allDay: boolean, timeZone: string | undefined): calendar_v3.Schema$EventDateTime {
-  return allDay
-    ? { date: new Date(value).toISOString().split('T')[0] }
-    : { dateTime: new Date(value).toISOString(), timeZone: timeZone ?? 'Etc/GMT' }
-}
-
-function getTimezone (event: Event): string | undefined {
-  return event.timeZone
 }

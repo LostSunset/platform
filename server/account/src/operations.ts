@@ -21,6 +21,7 @@ import {
   buildSocialIdString,
   concatLink,
   isActiveMode,
+  isDeletingMode,
   isWorkspaceCreating,
   type MeasureContext,
   type Person,
@@ -1320,7 +1321,7 @@ export async function getUserWorkspaces (
   const { account } = decodeTokenVerbose(ctx, token)
 
   return (await db.getAccountWorkspaces(account)).filter(
-    (ws) => !ws.status.isDisabled || isWorkspaceCreating(ws.status.mode)
+    (ws) => isWorkspaceCreating(ws.status.mode) || !(isDeletingMode(ws.status.mode) || ws.status.isDisabled)
   )
 }
 
@@ -1390,10 +1391,14 @@ export async function getWorkspaceInfo (
 
   const { account, workspace: workspaceUuid, extra } = decodeTokenVerbose(ctx, token)
   const isGuest = extra?.guest === 'true'
+  const isAdmin = extra?.admin === 'true'
   const skipAssignmentCheck = isGuest || account === systemAccountUuid
 
   if (!skipAssignmentCheck) {
-    const role = await db.getWorkspaceRole(account, workspaceUuid)
+    let role = await db.getWorkspaceRole(account, workspaceUuid)
+    if (role === null && isAdmin) {
+      role = AccountRole.Admin
+    }
 
     if (role == null) {
       ctx.error('Not a member of the workspace', { workspaceUuid, account })
@@ -1414,7 +1419,7 @@ export async function getWorkspaceInfo (
     throw new PlatformError(new Status(Severity.ERROR, platform.status.WorkspaceNotFound, { workspaceUuid }))
   }
 
-  if (!isGuest && updateLastVisit) {
+  if (!isGuest && updateLastVisit && !isAdmin) {
     await db.workspaceStatus.update({ workspaceUuid }, { lastVisit: Date.now() })
   }
 
@@ -1449,6 +1454,7 @@ export async function getLoginInfoByToken (
 
   const isDocGuest = accountUuid === GUEST_ACCOUNT && extra?.guest === 'true'
   const isSystem = accountUuid === systemAccountUuid
+  const isAdmin = extra?.admin === 'true'
   let socialId: SocialId | null = null
 
   if (!isDocGuest && !isSystem) {
@@ -1513,7 +1519,10 @@ export async function getLoginInfoByToken (
       }
     }
 
-    const role = await getWorkspaceRole(db, accountUuid, workspace.uuid)
+    let role = await getWorkspaceRole(db, accountUuid, workspace.uuid)
+    if (role === null && isAdmin) {
+      role = AccountRole.Admin
+    }
 
     if (role == null) {
       // User might have been removed from the workspace

@@ -807,11 +807,11 @@ abstract class PostgresAdapterBase implements DbAdapter {
         const res = `INNER JOIN ${translateDomain(DOMAIN_SPACE)} AS sec ON sec._id = ${domain}.${key} AND sec."workspaceId" = ${vars.add(this.workspaceId, '::uuid')} AND ${q}`
 
         const collabSec = this.modelDb.findAllSync(core.class.ClassCollaborators, { attachedTo: _class })[0]
-        if (collabSec === undefined || collabSec.provideSecurity !== true || acc.role !== AccountRole.Guest) {
-          return res
+        if (collabSec?.provideSecurity === true && [AccountRole.Guest, AccountRole.ReadOnlyGuest].includes(acc.role)) {
+          const collab = ` INNER JOIN ${translateDomain(DOMAIN_COLLABORATOR)} AS collab_sec ON collab_sec.collaborator = '${acc.uuid}' AND collab_sec."attachedTo" = ${domain}._id AND collab_sec."workspaceId" = ${vars.add(this.workspaceId, '::uuid')} AND ${q}`
+          return res + collab
         }
-        const collab = ` INNER JOIN ${translateDomain(DOMAIN_COLLABORATOR)} AS collab_sec ON collab_sec.collaborator = '${acc.uuid}' AND collab_sec."attachedTo" = ${domain}._id AND collab_sec."workspaceId" = ${vars.add(this.workspaceId, '::uuid')} AND ${q}`
-        return res + collab
+        return res
       }
     }
   }
@@ -1488,8 +1488,8 @@ abstract class PostgresAdapterBase implements DbAdapter {
     return type === 'common'
       ? `${tlkey} = ${vars.add(value, valType)}`
       : type === 'array'
-        ? `${tkey} @> '${typeof value === 'string' ? '{"' + value + '"}' : value}'`
-        : `${tkey} @> '${typeof value === 'string' ? '"' + value + '"' : value}'`
+        ? `${tkey} @> '${typeof value === 'string' ? '{"' + escape(value) + '"}' : value}'`
+        : `${tkey} @> '${typeof value === 'string' ? '"' + escape(value) + '"' : value}'`
   }
 
   private getReverseProjection (vars: ValuesVariables, join: JoinProps): string[] {

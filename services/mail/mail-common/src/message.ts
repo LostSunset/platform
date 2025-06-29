@@ -42,7 +42,7 @@ import {
 } from '@hcengineering/communication-sdk-types'
 import { generateMessageId } from '@hcengineering/communication-shared'
 
-import { BaseConfig, type Attachment } from './types'
+import { BaseConfig, SyncOptions, type Attachment } from './types'
 import { EmailMessage, MailRecipient, MessageData } from './types'
 import { getBlobMetadata, getMdContent } from './utils'
 import { PersonCacheFactory } from './person'
@@ -86,7 +86,8 @@ export async function createMessages (
   wsInfo: WorkspaceLoginInfo,
   message: EmailMessage,
   attachments: Attachment[],
-  recipients?: MailRecipient[]
+  recipients?: MailRecipient[],
+  options?: SyncOptions
 ): Promise<void> {
   const { mailId, from, subject, replyTo } = message
   const tos = [...(message.to ?? []), ...(message.copy ?? [])]
@@ -169,7 +170,8 @@ export async function createMessages (
           person,
           message.sendOn,
           channelCache,
-          replyTo
+          replyTo,
+          options
         )
       }
     } catch (error) {
@@ -195,7 +197,8 @@ async function saveMessageToSpaces (
   recipient: MailRecipient,
   createdDate: number,
   channelCache: ChannelCache,
-  inReplyTo?: string
+  inReplyTo?: string,
+  options?: SyncOptions
 ): Promise<void> {
   const rateLimiter = new RateLimiter(10)
   for (const space of spaces) {
@@ -226,10 +229,10 @@ async function saveMessageToSpaces (
             createdBy: modifiedBy,
             modifiedBy,
             parent: channel,
-            createdOn: createdDate
+            createdOn: createdDate - 4 // Add a small shift to ensure correct ordering
           },
           generateId(),
-          createdDate,
+          createdDate - 4,
           modifiedBy
         )
         threadId = newThreadId as Ref<Card>
@@ -251,12 +254,12 @@ async function saveMessageToSpaces (
         isReply
       }
 
-      const messageId = await createMailMessage(producer, config, messageData, threadId)
-      await createFiles(ctx, producer, config, attachments, messageData, threadId, messageId)
       if (!isReply) {
         await addCollaborators(producer, config, messageData, threadId)
-        await createMailThread(producer, config, messageData, messageId)
+        await createMailThread(producer, config, messageData, options)
       }
+      const messageId = await createMailMessage(producer, config, messageData, threadId, options)
+      await createFiles(ctx, producer, config, attachments, messageData, threadId, messageId)
 
       await threadLookup.setThreadId(mailId, space._id, threadId)
     })
@@ -268,19 +271,36 @@ async function createMailThread (
   producer: Producer,
   config: BaseConfig,
   data: MessageData,
-  messageId: MessageID
+  options?: SyncOptions
 ): Promise<void> {
+  const subjectId = generateMessageId()
+  const createSubjectEvent: CreateMessageEvent = {
+    type: MessageEventType.CreateMessage,
+    messageType: MessageType.Message,
+    cardId: data.channel,
+    cardType: chat.masterTag.Thread,
+    content: data.subject,
+    socialId: data.modifiedBy,
+    date: new Date(data.created.getTime() - 1),
+    messageId: subjectId,
+    options: {
+      noNotify: options?.noNotify
+    }
+  }
+  const createSubjectData = Buffer.from(JSON.stringify(createSubjectEvent))
+  await sendToCommunicationTopic(producer, config, data, createSubjectData)
+
   const threadEvent: ThreadPatchEvent = {
     type: MessageEventType.ThreadPatch,
     cardId: data.channel,
-    messageId,
+    messageId: subjectId,
     operation: {
       opcode: 'attach',
       threadId: data.threadId,
       threadType: chat.masterTag.Thread
     },
     socialId: data.modifiedBy,
-    date: data.created
+    date: new Date(data.created.getTime() - 3)
   }
   const thread = Buffer.from(JSON.stringify(threadEvent))
   await sendToCommunicationTopic(producer, config, data, thread)
@@ -290,18 +310,22 @@ async function createMailMessage (
   producer: Producer,
   config: BaseConfig,
   data: MessageData,
-  threadId: Ref<Card>
+  threadId: Ref<Card>,
+  options?: SyncOptions
 ): Promise<MessageID> {
   const messageId = generateMessageId()
   const createMessageEvent: CreateMessageEvent = {
     type: MessageEventType.CreateMessage,
     messageType: MessageType.Message,
-    cardId: data.isReply ? threadId : data.channel,
+    cardId: threadId,
     cardType: chat.masterTag.Thread,
     content: data.content,
     socialId: data.modifiedBy,
     date: data.created,
-    messageId
+    messageId,
+    options: {
+      noNotify: options?.noNotify
+    }
   }
   const createMessageData = Buffer.from(JSON.stringify(createMessageEvent))
   await sendToCommunicationTopic(producer, config, data, createMessageData)
@@ -320,7 +344,7 @@ async function createFiles (
   const fileData: Buffer[] = attachments.map((a) => {
     const attachBlobEvent: BlobPatchEvent = {
       type: MessageEventType.BlobPatch,
-      cardId: messageData.isReply ? threadId : messageData.channel,
+      cardId: threadId,
       messageId,
       socialId: messageData.modifiedBy,
       operations: [
@@ -368,7 +392,7 @@ async function addCollaborators (
     cardType: chat.masterTag.Thread,
     collaborators: [data.recipient.uuid as AccountUuid],
     socialId: data.modifiedBy,
-    date: new Date(data.created.getTime() - 1)
+    date: new Date(data.created.getTime() - 2)
   }
   const createMessageData = Buffer.from(JSON.stringify(addCollaboratorsEvent))
   await sendToCommunicationTopic(producer, config, data, createMessageData)
