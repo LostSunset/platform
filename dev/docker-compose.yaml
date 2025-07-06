@@ -9,8 +9,10 @@ services:
       - STREAM_INSECURE=true
       - STREAM_SERVER_SECRET=secret
       - STREAM_MAX_PARALLEL_SCALING_COUNT=6
+      - STREAM_LOG_LEVEL=debug
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
+      - STREAM_REGION=cockroach
       - STREAM_QUEUE_CONFIG=${QUEUE_CONFIG}
     ports:
       - 1080:1080
@@ -21,7 +23,9 @@ services:
       - 'huly.local:host-gateway'
     container_name: media
     environment:
+      - ACCOUNTS_URL=http://huly.local:3000
       - SECRET=secret
+      - REGION=cockroach
       - QUEUE_CONFIG=${QUEUE_CONFIG}
     restart: unless-stopped
   cockroach:
@@ -333,6 +337,7 @@ services:
       - 4005:4005
     environment:
       - SECRET=secret
+      - REGION=cockroach
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - STORAGE_CONFIG=${STORAGE_CONFIG}
       - STATS_URL=http://huly.local:4900
@@ -350,6 +355,7 @@ services:
     environment:
       - SECRET=secret
       - MINIO_ENDPOINT=minio
+      - REGION=cockroach
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - MINIO_ACCESS_KEY=minioadmin
       - ACCOUNTS_URL=http://huly.local:3000
@@ -432,6 +438,7 @@ services:
       - STATS_URL=http://huly.local:4900
       - DB_URL=${DB_CR_URL}
       - BUCKETS=blobs,eu|http://minio:9000?accessKey=minioadmin&secretKey=minioadmin
+      - REGION=cockroach
       - QUEUE_CONFIG=${QUEUE_CONFIG}
     restart: unless-stopped
   hulykvs:
@@ -462,30 +469,30 @@ services:
       - HULY_TOKEN_SECRET=secret
       - HULY_ACCOUNT_SERVICE=http://huly.local:3000
     restart: unless-stopped
-  # backup-cockroach:
-  #   image: hardcoreeng/backup
-  #   extra_hosts:
-  #     - 'huly.local:host-gateway'
-  #   depends_on:
-  #     minio:
-  #       condition: service_healthy
-  #     cockroach:
-  #       condition: service_started
-  #     stats:
-  #       condition: service_started
-  #     account:
-  #       condition: service_started
-  #   environment:
-  #     - SECRET=secret
-  #     - ACCOUNTS_URL=http://huly.local:3000
-  #     - STATS_URL=http://huly.local:4900
-  #     - DB_URL=${DB_CR_URL}
-  #     - REGION=cockroach
-  #     - BUCKET_NAME=backups
-  #     - INTERVAL=3600
-  #     - STORAGE=minio|minio?accessKey=minioadmin&secretKey=minioadmin
-  #     - WORKSPACE_STORAGE=minio|minio?accessKey=minioadmin&secretKey=minioadmin
-  #   restart: unless-stopped
+  backup-cockroach:
+    image: hardcoreeng/backup
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    depends_on:
+      minio:
+        condition: service_healthy
+      cockroach:
+        condition: service_started
+      stats:
+        condition: service_started
+      account:
+        condition: service_started
+    environment:
+      - SECRET=secret
+      - ACCOUNTS_URL=http://huly.local:3000
+      - STATS_URL=http://huly.local:4900
+      - DB_URL=${DB_CR_URL}
+      - REGION=cockroach
+      - BUCKET_NAME=backups
+      - INTERVAL=60
+      - STORAGE=minio|minio?accessKey=minioadmin&secretKey=minioadmin
+      - WORKSPACE_STORAGE=${STORAGE_CONFIG}
+    restart: unless-stopped
   # backup-api:
   #   image: hardcoreeng/backup-api
   #   extra_hosts:

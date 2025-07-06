@@ -35,17 +35,19 @@ import {
   compactBackup,
   createFileBackupStorage,
   createStorageBackupStorage,
-  restore
+  restore,
+  backupDownload
 } from '@hcengineering/server-backup'
 import serverClientPlugin, { getAccountClient, getTransactorEndpoint } from '@hcengineering/server-client'
 import {
+  createBackupPipeline,
+  createEmptyBroadcastOps,
   registerAdapterFactory,
   registerDestroyFactory,
   registerServerPlugins,
   registerStringLoaders,
   registerTxAdapterFactory,
-  setAdapterSecurity,
-  sharedPipelineContextVars
+  setAdapterSecurity
 } from '@hcengineering/server-pipeline'
 import serverToken, { generateToken } from '@hcengineering/server-token'
 import { createWorkspace, upgradeWorkspace } from '@hcengineering/workspace-service'
@@ -83,7 +85,6 @@ import {
   getMongoClient,
   shutdownMongo
 } from '@hcengineering/mongo'
-import { backupDownload } from '@hcengineering/server-backup/src/backup'
 
 import { getModelVersion } from '@hcengineering/model-all'
 import {
@@ -95,6 +96,7 @@ import {
 import {
   QueueTopic,
   workspaceEvents,
+  type Pipeline,
   type QueueWorkspaceMessage,
   type StorageAdapter
 } from '@hcengineering/server-core'
@@ -115,6 +117,7 @@ import { performGmailAccountMigrations } from './gmail'
 import { getToolToken, getWorkspace, getWorkspaceTransactorEndpoint } from './utils'
 
 import { createRestClient } from '@hcengineering/api-client'
+import { sendTransactorEvent } from '@hcengineering/server-tool'
 import { existsSync } from 'fs'
 import { mkdir, writeFile } from 'fs/promises'
 import { dirname } from 'path'
@@ -134,10 +137,10 @@ const colorConstants = {
 
 // Register close on process exit.
 process.on('exit', () => {
-  shutdownPostgres(sharedPipelineContextVars).catch((err) => {
+  shutdownPostgres().catch((err) => {
     console.error(err)
   })
-  shutdownMongo(sharedPipelineContextVars).catch((err) => {
+  shutdownMongo().catch((err) => {
     console.error(err)
   })
 })
@@ -188,6 +191,7 @@ export function devTool (
   setMetadata(accountPlugin.metadata.Transactors, transactorUrl)
   setMetadata(serverClientPlugin.metadata.Endpoint, accountsUrl)
   setMetadata(serverToken.metadata.Secret, serverSecret)
+  setMetadata(serverToken.metadata.Service, 'tool')
 
   async function withAccountDatabase (
     f: (db: AccountDB) => Promise<any>,
@@ -349,62 +353,70 @@ export function devTool (
     .description('create workspace')
     .option('-i, --init <ws>', 'Init from workspace')
     .option('-r, --region <region>', 'Region')
+    .option('-d, --dataId <dataId>', 'DataId for workspace')
     .option('-b, --branding <key>', 'Branding key')
-    .action(async (name, socialString, cmd: { account: string, init?: string, branding?: string, region?: string }) => {
-      const { txes, version, migrateOperations } = prepareTools()
-      await withAccountDatabase(async (db) => {
-        const measureCtx = new MeasureMetricsContext('create-workspace', {})
-        const brandingObj =
-          cmd.branding !== undefined || cmd.init !== undefined ? { key: cmd.branding, initWorkspace: cmd.init } : null
-        const socialId = await db.socialId.findOne({ key: socialString as PersonId })
-        if (socialId == null) {
-          throw new Error(`Social id ${socialString} not found`)
-        }
+    .action(
+      async (
+        name,
+        socialString,
+        cmd: { account: string, init?: string, branding?: string, region?: string, dataId?: string }
+      ) => {
+        const { txes, version, migrateOperations } = prepareTools()
+        await withAccountDatabase(async (db) => {
+          const measureCtx = new MeasureMetricsContext('create-workspace', {})
+          const brandingObj =
+            cmd.branding !== undefined || cmd.init !== undefined ? { key: cmd.branding, initWorkspace: cmd.init } : null
+          const socialId = await db.socialId.findOne({ key: socialString as PersonId })
+          if (socialId == null) {
+            throw new Error(`Social id ${socialString} not found`)
+          }
 
-        const res = await createWorkspaceRecord(
-          measureCtx,
-          db,
-          brandingObj,
-          name,
-          socialId.personUuid,
-          cmd.region,
-          'manual-creation'
-        )
-        const wsInfo = await getWorkspaceInfoWithStatusById(db, res.workspaceUuid)
+          const res = await createWorkspaceRecord(
+            measureCtx,
+            db,
+            brandingObj,
+            name,
+            socialId.personUuid,
+            cmd.region,
+            'manual-creation',
+            cmd.dataId as WorkspaceDataId
+          )
+          const wsInfo = await getWorkspaceInfoWithStatusById(db, res.workspaceUuid)
 
-        if (wsInfo == null) {
-          throw new Error(`Created workspace record ${res.workspaceUuid} not found`)
-        }
-        const coreWsInfo = flattenStatus(wsInfo)
-        const accountClient = getAccountClient(getToolToken())
+          if (wsInfo == null) {
+            throw new Error(`Created workspace record ${res.workspaceUuid} not found`)
+          }
+          const coreWsInfo = flattenStatus(wsInfo)
+          const accountClient = getAccountClient(getToolToken())
 
-        const queue = getPlatformQueue('tool', cmd.region)
-        const wsProducer = queue.getProducer<QueueWorkspaceMessage>(toolCtx, QueueTopic.Workspace)
+          const queue = getPlatformQueue('tool', cmd.region)
+          const wsProducer = queue.getProducer<QueueWorkspaceMessage>(toolCtx, QueueTopic.Workspace)
 
-        await createWorkspace(
-          measureCtx,
-          version,
-          brandingObj,
-          coreWsInfo,
-          txes,
-          migrateOperations,
-          accountClient,
-          wsProducer,
-          undefined,
-          true
-        )
-        await updateWorkspaceInfo(measureCtx, db, brandingObj, getToolToken(), {
-          workspaceUuid: res.workspaceUuid,
-          event: 'create-done',
-          version,
-          progress: 100
+          await createWorkspace(
+            measureCtx,
+            version,
+            brandingObj,
+            coreWsInfo,
+            txes,
+            migrateOperations,
+            accountClient,
+            wsProducer,
+            undefined,
+            true
+          )
+          await updateWorkspaceInfo(measureCtx, db, brandingObj, getToolToken(), {
+            workspaceUuid: res.workspaceUuid,
+            event: 'create-done',
+            version,
+            progress: 100
+          })
+
+          await wsProducer.send(res.workspaceUuid, [workspaceEvents.created()])
+          await queue.shutdown()
+          console.log(queue)
         })
-
-        await wsProducer.send(res.workspaceUuid, [workspaceEvents.created()])
-        await queue.shutdown()
-        console.log(queue)
-      })
-    })
+      }
+    )
 
   program
     .command('set-user-role <email> <workspace> <role>')
@@ -663,7 +675,6 @@ export function devTool (
   //                 },
   //                 cmd.region,
   //                 5000, // 5 gigabytes per blob
-  //                 sharedPipelineContextVars,
   //                 async (storage, workspaceStorage) => {
   //                   if (cmd.remove) {
   //                     await updateArchiveInfo(toolCtx, db, ws.workspace, true)
@@ -680,72 +691,6 @@ export function devTool (
   //                         docs.map((it) => it._id)
   //                       )
   //                     }
-
-  //                     const destroyer = getWorkspaceDestroyAdapter(dbUrl)
-
-  // program
-  //   .command('restore-all')
-  //   .description('Restore workspaces to selected region DB...')
-  //   .option('-t|--timeout [timeout]', 'Timeout in days', '60')
-  //   .option('-r|--region [region]', 'Timeout in days', '')
-  //   .option('-w|--workspace [workspace]', 'Force backup of selected workspace', '')
-  //   .option('-d|--dry [dry]', 'Dry run', false)
-  //   .action(async (cmd: { timeout: string, workspace: string, region: string, dry: boolean, account: string }) => {
-  //     const { txes, dbUrl } = prepareTools()
-
-  //     const bucketName = process.env.BUCKET_NAME
-  //     if (bucketName === '' || bucketName == null) {
-  //       console.error('please provide butket name env')
-  //       process.exit(1)
-  //     }
-
-  //     const token = generateToken(systemAccountEmail, getWorkspaceId(''))
-  //     const workspaces = (await listAccountWorkspaces(token, cmd.region))
-  //       .sort((a, b) => {
-  //         const bsize = b.backupInfo?.backupSize ?? 0
-  //         const asize = a.backupInfo?.backupSize ?? 0
-  //         return bsize - asize
-  //       })
-  //       .filter((it) => cmd.workspace === '' || cmd.workspace === it.workspace)
-
-  //     for (const ws of workspaces) {
-  //       const lastVisitDays = Math.floor((Date.now() - ws.lastVisit) / 1000 / 3600 / 24)
-
-  //       toolCtx.warn('--- restoring workspace', {
-  //         url: ws.workspaceUrl,
-  //         id: ws.workspace,
-  //         lastVisitDays,
-  //         backupSize: ws.backupInfo?.blobsSize ?? 0,
-  //         mode: ws.mode
-  //       })
-  //       if (cmd.dry) {
-  //         continue
-  //       }
-  //       try {
-  //         const st = Date.now()
-  //         await backupRestore(
-  //           toolCtx,
-  //           dbUrl,
-  //           bucketName,
-  //           ws,
-  //           (dbUrl, storageAdapter) => {
-  //             const factory: PipelineFactory = createBackupPipeline(toolCtx, dbUrl, txes, {
-  //               externalStorage: storageAdapter,
-  //               usePassedCtx: true
-  //             })
-  //             return factory
-  //           },
-  //           [DOMAIN_BLOB]
-  //         )
-  //         const ed = Date.now()
-  //         toolCtx.warn('--- restoring complete', {
-  //           time: ed - st
-  //         })
-  //       } catch (err: any) {
-  //         toolCtx.error('REstore of f workspace failedarchive workspace', { workspace: ws.workspace })
-  //       }
-  //     }
-  //   })
 
   // program
   //   .command('backup-all')
@@ -783,7 +728,6 @@ export function devTool (
   //               },
   //               cmd.region,
   //               100,
-  //               sharedPipelineContextVars
   //             )
   //           ) {
   //             processed++
@@ -998,6 +942,7 @@ export function devTool (
       ) => {
         const storage = await createFileBackupStorage(dirName)
         await withAccountDatabase(async (db) => {
+          const { txes, dbUrl } = prepareTools()
           const ws = await getWorkspace(db, workspace)
           if (ws === null) {
             throw new Error(`workspace ${workspace} not found`)
@@ -1007,21 +952,51 @@ export function devTool (
             dataId: ws.dataId,
             url: ws.url
           }
-          const endpoint = await getWorkspaceTransactorEndpoint(ws.uuid)
+          const storageConfig = storageConfigFromEnv()
 
-          await backup(toolCtx, endpoint, wsIds, storage, {
-            force: cmd.force,
-            include: cmd.include === '*' ? undefined : new Set(cmd.include.split(';').map((it) => it.trim())),
-            skipDomains: (cmd.skip ?? '').split(';').map((it) => it.trim()),
-            timeout: 0,
-            connectTimeout: parseInt(cmd.timeout) * 1000,
-            blobDownloadLimit: parseInt(cmd.blobLimit),
-            skipBlobContentTypes: cmd.contentTypes
-              .split(';')
-              .map((it) => it.trim())
-              .filter((it) => it.length > 0),
-            keepSnapshots: parseInt(cmd.keepSnapshots)
-          })
+          const workspaceStorage: StorageAdapter = buildStorageFromConfig(storageConfig)
+
+          let pipeline: Pipeline | undefined
+          try {
+            pipeline = await createBackupPipeline(toolCtx, dbUrl, txes, {
+              externalStorage: workspaceStorage,
+              usePassedCtx: true
+            })(
+              toolCtx,
+              {
+                uuid: ws.uuid,
+                url: ws.url ?? '',
+                dataId: ws.dataId
+              },
+              createEmptyBroadcastOps(),
+              null
+            )
+            if (pipeline === undefined) {
+              toolCtx.error('failed to restore, pipeline is undefined', { workspace })
+              return
+            }
+
+            await backup(toolCtx, pipeline, wsIds, storage, {
+              force: cmd.force,
+              include: cmd.include === '*' ? undefined : new Set(cmd.include.split(';').map((it) => it.trim())),
+              skipDomains: (cmd.skip ?? '').split(';').map((it) => it.trim()),
+              timeout: 0,
+              connectTimeout: parseInt(cmd.timeout) * 1000,
+              blobDownloadLimit: parseInt(cmd.blobLimit),
+              skipBlobContentTypes: cmd.contentTypes
+                .split(';')
+                .map((it) => it.trim())
+                .filter((it) => it.length > 0),
+              keepSnapshots: parseInt(cmd.keepSnapshots)
+            })
+          } catch (err: any) {
+            toolCtx.error('Failed to backup workspace', { err, workspace })
+          } finally {
+            if (pipeline !== undefined) {
+              await pipeline.close()
+            }
+            await workspaceStorage.close()
+          }
         })
       }
     )
@@ -1139,7 +1114,6 @@ export function devTool (
     .option('-c, --recheck', 'Force hash recheck on server', false)
     .option('-i, --include <include>', 'A list of ; separated domain names to include during backup', '*')
     .option('-s, --skip <skip>', 'A list of ; separated domain names to skip during backup', '')
-    .option('--use-storage <useStorage>', 'Use workspace storage adapter from env variable', '')
     .option('--upgrade', 'Upgrade workspace', false)
     .option(
       '--history-file <historyFile>',
@@ -1164,6 +1138,7 @@ export function devTool (
         }
       ) => {
         await withAccountDatabase(async (db) => {
+          const { txes, dbUrl } = prepareTools()
           const ws = await getWorkspace(db, workspaceId)
           if (ws === null) {
             throw new Error(`workspace ${workspaceId} not found`)
@@ -1176,32 +1151,58 @@ export function devTool (
             url: ws.url
           }
           const storage = await createFileBackupStorage(dirName)
-          const storageConfig = cmd.useStorage !== '' ? storageConfigFromEnv(process.env[cmd.useStorage]) : undefined
+          const storageConfig = storageConfigFromEnv()
 
           const queue = getPlatformQueue('tool', ws.region)
           const wsProducer = queue.getProducer<QueueWorkspaceMessage>(toolCtx, QueueTopic.Workspace)
 
           await wsProducer.send(ws.uuid, [workspaceEvents.restoring()])
 
-          const workspaceStorage: StorageAdapter | undefined =
-            storageConfig !== undefined ? buildStorageFromConfig(storageConfig) : undefined
-          await restore(toolCtx, await getWorkspaceTransactorEndpoint(workspace), wsIds, storage, {
-            date: parseInt(date ?? '-1'),
-            merge: cmd.merge,
-            parallel: parseInt(cmd.parallel ?? '1'),
-            recheck: cmd.recheck,
-            include: cmd.include === '*' ? undefined : new Set(cmd.include.split(';')),
-            skip: new Set(cmd.skip.split(';')),
-            storageAdapter: workspaceStorage,
-            historyFile: cmd.historyFile
-          })
+          const workspaceStorage: StorageAdapter = buildStorageFromConfig(storageConfig)
 
-          if (cmd.upgrade) {
-            await doUpgrade(toolCtx, workspace, true, true)
+          let pipeline: Pipeline | undefined
+          try {
+            pipeline = await createBackupPipeline(toolCtx, dbUrl, txes, {
+              externalStorage: workspaceStorage,
+              usePassedCtx: true
+            })(
+              toolCtx,
+              {
+                uuid: ws.uuid,
+                url: ws.url ?? '',
+                dataId: ws.dataId
+              },
+              createEmptyBroadcastOps(),
+              null
+            )
+            if (pipeline === undefined) {
+              toolCtx.error('failed to restore, pipeline is undefined', { workspaceId })
+              return
+            }
+            await sendTransactorEvent(workspace, 'force-maintenance')
+
+            await restore(toolCtx, pipeline, wsIds, storage, {
+              date: parseInt(date ?? '-1'),
+              merge: cmd.merge,
+              parallel: parseInt(cmd.parallel ?? '1'),
+              recheck: cmd.recheck,
+              include: cmd.include === '*' ? undefined : new Set(cmd.include.split(';')),
+              skip: new Set(cmd.skip.split(';')),
+              historyFile: cmd.historyFile
+            })
+
+            if (cmd.upgrade) {
+              await doUpgrade(toolCtx, workspace, true, true)
+            } else {
+              await sendTransactorEvent(workspace, 'force-close')
+            }
+
+            console.log('workspace restored')
+            await wsProducer.send(ws.uuid, [workspaceEvents.restored()])
+          } catch (err) {
+            toolCtx.error('failed to restore', { err })
           }
-
-          console.log('workspace restored')
-          await wsProducer.send(ws.uuid, [workspaceEvents.restored()])
+          await pipeline?.close()
           await queue.shutdown()
           await workspaceStorage?.close()
         })

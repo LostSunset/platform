@@ -382,42 +382,61 @@ export class ClientSession implements Session {
 
   async domainRequest (ctx: ClientSessionCtx, domain: OperationDomain, params: DomainParams): Promise<void> {
     try {
-      const result: DomainResult = await this.domainRequestRaw(ctx, domain, params)
-      await ctx.sendResponse(ctx.requestId, result)
+      const { asyncsPromise, broadcastPromise } = await this.domainRequestRaw(ctx, domain, params)
 
-      // We need to broadcast all collected transactions
-      const broadcastPromise = ctx.pipeline.handleBroadcast(ctx.ctx)
-
-      // ok we could perform async requests if any
-      const asyncs = (ctx.ctx.contextData as SessionData).asyncRequests ?? []
-      let asyncsPromise: Promise<void> | undefined
-      if (asyncs.length > 0) {
-        const handleAyncs = async (): Promise<void> => {
-          try {
-            for (const r of asyncs) {
-              await r(ctx.ctx)
-            }
-          } catch (err: any) {
-            ctx.ctx.error('failed to handleAsyncs', { err })
-          }
-        }
-        asyncsPromise = handleAyncs()
-      }
       await broadcastPromise
+
       if (asyncsPromise !== undefined) {
         await asyncsPromise
       }
     } catch (err) {
-      await ctx.sendError(ctx.requestId, 'Failed to findAll', unknownError(err))
-      ctx.ctx.error('failed to findAll', { err })
+      await ctx.sendError(ctx.requestId, 'Failed to domainRequest', unknownError(err))
+      ctx.ctx.error('failed to domainRequest', { err })
     }
   }
 
-  async domainRequestRaw (ctx: ClientSessionCtx, domain: OperationDomain, params: DomainParams): Promise<DomainResult> {
+  async domainRequestRaw (
+    ctx: ClientSessionCtx,
+    domain: OperationDomain,
+    params: DomainParams
+  ): Promise<{
+      result: DomainResult
+      broadcastPromise: Promise<void>
+      asyncsPromise: Promise<void> | undefined
+    }> {
     this.lastRequest = Date.now()
     this.total.find++
     this.current.find++
     this.includeSessionContext(ctx)
-    return await ctx.pipeline.domainRequest(ctx.ctx, domain, params)
+
+    const result: DomainResult = await ctx.pipeline.domainRequest(ctx.ctx, domain, params)
+    await ctx.sendResponse(ctx.requestId, result)
+    // We need to broadcast all collected transactions
+    const broadcastPromise = ctx.pipeline.handleBroadcast(ctx.ctx)
+
+    // ok we could perform async requests if any
+    const asyncs = (ctx.ctx.contextData as SessionData).asyncRequests ?? []
+    let asyncsPromise: Promise<void> | undefined
+    if (asyncs.length > 0) {
+      const handleAyncs = async (): Promise<void> => {
+        // Make sure the broadcast is complete before we start the asyncs
+        await broadcastPromise
+        ctx.ctx.contextData.broadcast.queue = []
+        ctx.ctx.contextData.broadcast.txes = []
+        ctx.ctx.contextData.broadcast.sessions = {}
+        try {
+          for (const r of asyncs) {
+            await r(ctx.ctx)
+          }
+        } catch (err: any) {
+          ctx.ctx.error('failed to handleAsyncs', { err })
+        }
+      }
+      asyncsPromise = handleAyncs().then(async () => {
+        await ctx.pipeline?.handleBroadcast(ctx.ctx)
+      })
+    }
+
+    return { result, asyncsPromise, broadcastPromise }
   }
 }

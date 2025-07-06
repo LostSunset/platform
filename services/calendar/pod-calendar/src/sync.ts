@@ -15,6 +15,7 @@
 
 import { AccountClient } from '@hcengineering/account-client'
 import calendar, {
+  AccessLevel,
   Calendar,
   Event,
   ExternalCalendar,
@@ -49,43 +50,18 @@ import {
   setCalendarsSyncHistory,
   setEventHistory
 } from './kvsUtils'
+import { lock } from './mutex'
 import { getRateLimitter, RateLimiter } from './rateLimiter'
 import { CALENDAR_INTEGRATION, GoogleEmail, Token, User } from './types'
 import {
   getGoogleClient,
   getWorkspaceToken,
+  parseEventDate,
   parseRecurrenceStrings,
   removeIntegrationSecret,
   setCredentials
 } from './utils'
 import { WatchController } from './watch'
-
-const locks = new Map<string, Promise<void>>()
-
-export async function lock (key: string): Promise<() => void> {
-  // Wait for any existing lock to be released
-  const currentLock = locks.get(key)
-  if (currentLock != null) {
-    await currentLock
-  }
-
-  // Create a new lock
-  let releaseFn!: () => void
-  const newLock = new Promise<void>((resolve) => {
-    releaseFn = resolve
-  })
-
-  // Store the lock
-  locks.set(key, newLock)
-
-  // Return the release function
-  return () => {
-    if (locks.get(key) === newLock) {
-      locks.delete(key)
-    }
-    releaseFn()
-  }
-}
 
 export class IncomingSyncManager {
   private readonly rateLimiter: RateLimiter
@@ -269,6 +245,12 @@ export class IncomingSyncManager {
         showDeleted: syncToken != null
       })
       if (res.status === 410) {
+        this.ctx.warn('Sync token is no longer valid, resyncing calendar', {
+          workspace: this.user.workspace,
+          user: this.user.userId,
+          email: this.email,
+          calendarId
+        })
         await this.eventsSync(calendarId)
         return
       }
@@ -290,6 +272,12 @@ export class IncomingSyncManager {
     } catch (err: any) {
       if (err?.response?.status === 410) {
         await this.eventsSync(calendarId)
+        this.ctx.warn('Sync token is no longer valid, resyncing calendar', {
+          workspace: this.user.workspace,
+          user: this.user.userId,
+          email: this.email,
+          calendarId
+        })
         return
       }
       this.ctx.error('Event sync error', { workspace: this.user.workspace, user: this.user.userId, err })
@@ -331,7 +319,7 @@ export class IncomingSyncManager {
         {
           ...data,
           recurringEventId: event.recurringEventId as Ref<ReccuringEvent>,
-          originalStartTime: parseDate(event.originalStartTime),
+          originalStartTime: parseEventDate(event.originalStartTime),
           isCancelled: event.status === 'cancelled'
         },
         current as ReccuringInstance
@@ -395,17 +383,14 @@ export class IncomingSyncManager {
     }
   }
 
-  private getAccess (
-    event: calendar_v3.Schema$Event,
-    accessRole: string
-  ): 'freeBusyReader' | 'reader' | 'writer' | 'owner' {
-    if (accessRole !== 'owner') {
-      return accessRole as 'freeBusyReader' | 'reader' | 'writer'
+  private getAccess (event: calendar_v3.Schema$Event, accessRole: string): AccessLevel {
+    if (accessRole !== AccessLevel.Owner) {
+      return accessRole as AccessLevel
     }
     if (event.creator?.self === true) {
-      return 'owner'
+      return AccessLevel.Owner
     } else {
-      return 'reader'
+      return AccessLevel.Reader
     }
   }
 
@@ -416,8 +401,8 @@ export class IncomingSyncManager {
   ): Promise<AttachedData<Event>> {
     const participants = await this.getParticipants(event)
     const res: AttachedData<Event> = {
-      date: parseDate(event.start),
-      dueDate: parseDate(event.end),
+      date: parseEventDate(event.start),
+      dueDate: parseEventDate(event.end),
       allDay: event.start?.date != null,
       description: htmlToMarkup(event.description ?? ''),
       title: event.summary ?? '',
@@ -516,10 +501,10 @@ export class IncomingSyncManager {
       res.title = event.summary
     }
     if (event.start != null) {
-      res.date = parseDate(event.start)
+      res.date = parseEventDate(event.start)
     }
     if (event.end != null) {
-      res.dueDate = parseDate(event.end)
+      res.dueDate = parseEventDate(event.end)
     }
     if (event.visibility != null && event.visibility !== 'default') {
       res.visibility =
@@ -551,7 +536,7 @@ export class IncomingSyncManager {
         {
           ...data,
           recurringEventId: event.recurringEventId,
-          originalStartTime: parseDate(event.originalStartTime),
+          originalStartTime: parseEventDate(event.originalStartTime),
           isCancelled: event.status === 'cancelled',
           rules: parseRule.rules,
           exdate: parseRule.exdate,
@@ -620,7 +605,7 @@ export class IncomingSyncManager {
 
   private async getMyCalendars (): Promise<void> {
     this.calendars = await this.client.findAll(calendar.class.ExternalCalendar, {
-      createdBy: this.user.userId
+      user: this.user.userId
     })
   }
 
@@ -695,13 +680,9 @@ export class IncomingSyncManager {
           hidden: false,
           externalId: val.id,
           externalUser: this.email,
-          default: false
-        }
-        if (val.primary === true) {
-          const primaryExists = this.calendars.find((p) => p.default)
-          if (primaryExists === undefined) {
-            data.default = true
-          }
+          default: val.primary === true,
+          user: this.user.userId,
+          access: (val.accessRole as AccessLevel) ?? AccessLevel.Owner
         }
         const _id = generateId<ExternalCalendar>()
         const tx = this.client.txFactory.createTxCreateDoc<ExternalCalendar>(
@@ -719,20 +700,13 @@ export class IncomingSyncManager {
         if (exists.name !== val.summary) {
           update.name = val.summary ?? exists.name
         }
+        if (exists.access !== (val.accessRole as AccessLevel)) {
+          update.access = (val.accessRole as AccessLevel) ?? AccessLevel.Owner
+        }
         if (Object.keys(update).length > 0) {
           await this.client.update(exists, update)
         }
       }
     }
   }
-}
-
-function parseDate (date: calendar_v3.Schema$EventDateTime | undefined): number {
-  if (date?.dateTime != null) {
-    return new Date(date.dateTime).getTime()
-  }
-  if (date?.date != null) {
-    return new Date(date.date).getTime()
-  }
-  return 0
 }

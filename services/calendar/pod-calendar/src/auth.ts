@@ -31,11 +31,12 @@ import { Credentials, OAuth2Client } from 'google-auth-library'
 import { calendar_v3, google } from 'googleapis'
 import { encode64 } from './base64'
 import { getClient } from './client'
-import { addUserByEmail, removeUserByEmail } from './kvsUtils'
-import { IncomingSyncManager, lock } from './sync'
+import { addUserByEmail, removeUserByEmail, setSyncHistory } from './kvsUtils'
+import { IncomingSyncManager } from './sync'
 import { CALENDAR_INTEGRATION, GoogleEmail, SCOPES, State, Token, User } from './types'
 import { getGoogleClient, getWorkspaceToken, removeIntegrationSecret } from './utils'
 import { WatchController } from './watch'
+import { lock } from './mutex'
 
 interface AuthResult {
   success: boolean
@@ -140,6 +141,7 @@ export class AuthController {
     const authRes = await this.authorize(code)
     await this.setWorkspaceIntegration(authRes)
     if (authRes.success) {
+      await setSyncHistory(this.user.workspace, Date.now())
       void IncomingSyncManager.initSync(
         this.ctx,
         this.accountClient,

@@ -32,6 +32,7 @@ import { IncomingSyncManager } from './sync'
 import { getWorkspaceTokens } from './tokens'
 import { GoogleEmail, Token } from './types'
 import { getWorkspaceToken } from './utils'
+import { synced } from './mutex'
 
 export class WorkspaceClient {
   private readonly clients = new Map<GoogleEmail, CalendarClient>()
@@ -92,7 +93,6 @@ export class WorkspaceClient {
       await addUserByEmail(parsedToken, token.key as GoogleEmail)
       await this.createCalendarClient(parsedToken)
     }
-    await this.getNewEvents()
     const limiter = new RateLimiter(config.InitLimit)
     for (const token of tokens) {
       await limiter.add(async () => {
@@ -100,6 +100,8 @@ export class WorkspaceClient {
         await IncomingSyncManager.sync(this.ctx, this.accountClient, parsedToken, parsedToken.email)
       })
     }
+    await limiter.waitProcessing()
+    await this.getNewEvents()
   }
 
   private async createCalendarClient (user: Token): Promise<CalendarClient | undefined> {
@@ -135,8 +137,12 @@ export class WorkspaceClient {
 
   private async getNewEvents (): Promise<void> {
     const lastSync = await getSyncHistory(this.workspace)
+    if (lastSync === undefined || Date.now() - lastSync > 7 * 24 * 60 * 60 * 1000) {
+      await setSyncHistory(this.workspace, Date.now())
+      return
+    }
     this.lastSync = lastSync ?? 0
-    const query = lastSync !== undefined ? { modifiedOn: { $gt: lastSync } } : {}
+    const query = { modifiedOn: { $gt: lastSync }, calendar: { $in: Array.from(this.calendarsById.keys()) } }
     const newEvents = await this.client.findAll(calendar.class.Event, query, { sort: { modifiedOn: 1 } })
     const interval = setInterval(() => {
       void this.updateSyncHistory()
@@ -159,6 +165,8 @@ export class WorkspaceClient {
       }
     }
     clearInterval(interval)
+    await setSyncHistory(this.workspace, Date.now())
+    synced.add(this.workspace)
     this.ctx.info('all outcoming messages synced', { workspace: this.workspace })
   }
 

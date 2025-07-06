@@ -358,7 +358,7 @@ export async function pushInboxNotifications (
 
   const notificationData = {
     user: receiver.account,
-    isViewed: false,
+    isViewed: receiver.role === 'GUEST',
     docNotifyContext: docNotifyContextId,
     archived: false,
     objectId,
@@ -1330,7 +1330,7 @@ export async function OnAttributeCreate (txes: Tx[], control: TriggerControl): P
       defaultEnabled: false,
       templates: {
         textTemplate: '{body}',
-        htmlTemplate: '<p>{body}</p>',
+        htmlTemplate: '<p>{body}</p><p>{link}</p>',
         subjectTemplate: '{doc} updated'
       },
       label: attribute.label

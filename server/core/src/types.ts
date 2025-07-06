@@ -132,9 +132,10 @@ export interface BroadcastOps {
   broadcastSessions: (measure: MeasureContext, sessionIds: Record<string, Tx[]>) => void
 }
 
-export interface BroadcastSessionsFunc {
-  broadcast: (ctx: MeasureContext, sessionIds: string[], result: any) => void
-  enqueue: (ctx: MeasureContext, result: any) => void
+export interface CommunicationCallbacks {
+  registerAsyncRequest: (ctx: MeasureContext, promise: (ctx: MeasureContext) => Promise<void>) => void
+  broadcast: (ctx: MeasureContext, sessionIds: Record<string, any[]>) => void
+  enqueue: (ctx: MeasureContext, result: any[]) => void
 }
 
 /**
@@ -253,7 +254,7 @@ export type PipelineFactory = (
 export type CommunicationApiFactory = (
   ctx: MeasureContext,
   ws: WorkspaceIds,
-  broadcastSessions: BroadcastSessionsFunc
+  callbacks: CommunicationCallbacks
 ) => Promise<CommunicationApi>
 
 /**
@@ -520,6 +521,7 @@ export interface StorageConfig {
   kind: string
   endpoint: string
   port?: number
+  readonly?: string
 }
 
 export class NoSuchKeyError extends Error {
@@ -643,7 +645,15 @@ export interface Session {
 
   updateLast: () => void
 
-  domainRequestRaw: (ctx: ClientSessionCtx, domain: OperationDomain, params: DomainParams) => Promise<DomainResult>
+  domainRequestRaw: (
+    ctx: ClientSessionCtx,
+    domain: OperationDomain,
+    params: DomainParams
+  ) => Promise<{
+    result: DomainResult
+    broadcastPromise: Promise<void>
+    asyncsPromise: Promise<void> | undefined
+  }>
 
   userCtx?: MeasureContext
 }
@@ -717,9 +727,11 @@ export interface SessionManager {
 
   forceClose: (wsId: WorkspaceUuid, ignoreSocket?: ConnectionSocket) => Promise<void>
 
+  forceMaintenance: (ctx: MeasureContext, workspaceId: WorkspaceUuid) => Promise<void>
+
   closeWorkspaces: (ctx: MeasureContext) => Promise<void>
 
-  scheduleMaintenance: (timeMinutes: number) => void
+  scheduleMaintenance: (timeMinutes: number, message?: string) => void
 
   profiling?: {
     start: () => void

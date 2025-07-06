@@ -58,6 +58,7 @@ export const main = async (): Promise<void> => {
   setMetadata(serverClient.metadata.Endpoint, config.AccountsURL)
   setMetadata(serverClient.metadata.UserAgent, config.ServiceID)
   setMetadata(serverToken.metadata.Secret, config.Secret)
+  setMetadata(serverToken.metadata.Service, 'calendar')
 
   const accountClient = getAccountClient(getServiceToken())
 
@@ -66,6 +67,7 @@ export const main = async (): Promise<void> => {
 
   const calendarController = CalendarController.getCalendarController(ctx, accountClient)
   await calendarController.startAll()
+  ctx.info('Calendar controller started')
   watchController.startCheck()
   const endpoints: Endpoint[] = [
     {

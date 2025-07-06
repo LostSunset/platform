@@ -113,9 +113,11 @@ export async function getToken (
   if (endpoint === undefined) {
     throw new Error('Love service endpoint not found')
   }
+  const token = getPlatformToken()
   const res = await fetch(concatLink(endpoint, '/getToken'), {
     method: 'POST',
     headers: {
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({ roomName: getTokenRoomName(roomName, roomId), _id: userId, participantName })
@@ -553,7 +555,7 @@ async function withRetries (fn: () => Promise<void>, retries: number, delay: num
 
 async function connect (name: string, room: Room, _id: string): Promise<void> {
   const wsURL = getMetadata(love.metadata.WebSocketURL)
-  if (wsURL === undefined) {
+  if (wsURL === undefined || getCurrentAccount().role === AccountRole.ReadOnlyGuest) {
     return
   }
 
@@ -1081,11 +1083,8 @@ export async function createMeetingSchedule (
   store: Record<string, any>,
   phase: DocCreatePhase
 ): Promise<void> {
-  console.log('createMeetingSchedule-0', _id)
   if (phase === 'post') {
-    console.log('createMeetingSchedule-1', _id)
     const schedule = await client.findOne(calendar.class.Schedule, { _id })
-    console.log('createMeetingSchedule-2', schedule)
     if (schedule === undefined) return
     await client.createMixin<Schedule, MeetingSchedule>(
       schedule._id,

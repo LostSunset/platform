@@ -207,6 +207,7 @@ export interface Attribute<T extends PropertyType> extends Doc, UXObject {
   shortLabel?: IntlString
   isCustom?: boolean
   defaultValue?: any
+  automationOnly?: boolean
 
   // Extra customization properties
   [key: string]: any
@@ -875,6 +876,8 @@ export interface SocialId {
 
   displayValue?: string
   verifiedOn?: number
+
+  isDeleted?: boolean // Social ids are soft-deleted so all objects created with them can still be properly displayed.
 }
 
 export interface AccountInfo {
