@@ -86,7 +86,11 @@
     "Round": "Runden",
     "Floor": "Abrunden",
     "Ceil": "Aufrunden",
-    "Absolute": "Absolutwert"
+    "Absolute": "Absolutwert",
+    "LogAction": "Ereignis",
+    "Started": "Gestartet",
+    "Each": "Jeder",
+    "CreateCard": "Karte erstellen"
   },  
   "error": {
     "MethodNotFound": "Methode nicht gefunden: {methodId}",
@@ -100,6 +104,7 @@
     "InternalServerError": "Interner Serverfehler, bitte kontaktieren Sie den Support, Fehler-ID: {errorId}",
     "ResultNotProvided": "Ergebnis nicht bereitgestellt",
     "EmptyFunctionResult": "Leerer Funktionsresultat {func}",
-    "ContextValueNotProvided": "Kontextwert nicht bereitgestellt: {name}"
+    "ContextValueNotProvided": "Kontextwert nicht bereitgestellt: {name}",
+    "RequiredParamsNotProvided": "Erforderliche Parameter nicht bereitgestellt: {params}"
   }
 }

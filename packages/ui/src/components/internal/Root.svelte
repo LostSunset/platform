@@ -104,6 +104,10 @@
       maintenanceTime = _status.params.time
       maintenanceMessage = _status.params.message
     } else {
+      if (_status.code === platform.status.RegularAccount) {
+        readonlyAccount = false
+        _status = OK
+      }
       if (readonlyAccount) return
       if (_status.code === platform.status.ReadOnlyAccount) {
         readonlyAccount = true

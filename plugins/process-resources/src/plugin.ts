@@ -20,6 +20,7 @@ import { type ViewQueryAction, type Viewlet } from '@hcengineering/view'
 export default mergeIds(processId, process, {
   viewlet: {
     ExecutionsList: '' as Ref<Viewlet>,
+    ExecutionLogList: '' as Ref<Viewlet>,
     CardExecutions: '' as Ref<Viewlet>
   },
   component: {
@@ -52,7 +53,14 @@ export default mergeIds(processId, process, {
     ToDoRemoveEditor: '' as AnyComponent,
     ProcessesCardSection: '' as AnyComponent,
     TransitionEditor: '' as AnyComponent,
-    StateEditor: '' as AnyComponent
+    StateEditor: '' as AnyComponent,
+    TransitionRefPresenter: '' as AnyComponent,
+    LogActionPresenter: '' as AnyComponent,
+    NotifierExtension: '' as AnyComponent,
+    CreateCardEditor: '' as AnyComponent,
+    CreateCardPresenter: '' as AnyComponent,
+    AddRelationEditor: '' as AnyComponent,
+    AddRelationPresenter: '' as AnyComponent
   },
   transformEditor: {
     DateOffsetEditor: '' as AnyComponent,
@@ -145,6 +153,9 @@ export default mergeIds(processId, process, {
     Search: '' as IntlString,
     Separator: '' as IntlString,
     Start: '' as IntlString,
-    End: '' as IntlString
+    End: '' as IntlString,
+    Started: '' as IntlString,
+    Each: '' as IntlString,
+    CreateCard: '' as IntlString
   }
 })
